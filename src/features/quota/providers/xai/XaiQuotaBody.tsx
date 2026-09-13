@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { XaiBillingSummary, XaiQuotaState } from '@/types';
-import { buildResetDisplay, formatQuotaResetTime, parseIsoToMs } from '@/utils/quota';
+import { buildResetDisplay, formatQuotaResetTime, parseIsoToMs, xaiPlanBadge } from '@/utils/quota';
 import { useNow } from '@/hooks/useNow';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
@@ -46,21 +46,6 @@ const formatXaiOnDemandAmount = (billing: XaiBillingSummary): string => {
 const formatXaiPercent = (value: number | null): string => {
   if (value === null) return '--';
   return `${Math.round(value)}%`;
-};
-
-const XAI_SUPERGROK_LIMIT_CENTS = 15_000;
-const XAI_SUPERGROK_HEAVY_LIMIT_CENTS = 150_000;
-
-const resolveXaiPlan = (
-  monthlyLimitCents: number | null
-): { labelKey: string; premium: boolean } | null => {
-  if (monthlyLimitCents === XAI_SUPERGROK_LIMIT_CENTS) {
-    return { labelKey: 'plan_supergrok', premium: false };
-  }
-  if (monthlyLimitCents === XAI_SUPERGROK_HEAVY_LIMIT_CENTS) {
-    return { labelKey: 'plan_supergrok_heavy', premium: true };
-  }
-  return null;
 };
 
 export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) {
@@ -116,7 +101,8 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
     clampedOnDemandUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedOnDemandUsed));
   const onDemandPercentLabel = formatXaiPercent(onDemandRemaining);
   const onDemandAmountLabel = formatXaiOnDemandAmount(billing);
-  const plan = resolveXaiPlan(billing.monthlyLimitCents);
+  // Shared with the compact quota list so both read the allowance the same way.
+  const plan = xaiPlanBadge(billing.monthlyLimitCents);
   const weeklyUsed =
     billing.periodType === 'weekly' && billing.usagePercent !== null
       ? Math.max(0, Math.min(100, billing.usagePercent))
@@ -139,11 +125,13 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
 
   return (
     <>
-      {plan && (
+      {plan?.labelKey && (
         <div className={classes.codexPlan}>
           <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
-          <span className={plan.premium ? classes.premiumPlanValue : classes.codexPlanValue}>
-            {t(`xai_quota.${plan.labelKey}`)}
+          <span
+            className={plan.tier === 'premium' ? classes.premiumPlanValue : classes.codexPlanValue}
+          >
+            {t(plan.labelKey)}
           </span>
         </div>
       )}

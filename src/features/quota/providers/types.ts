@@ -6,6 +6,7 @@
  */
 
 import type { TFunction } from 'i18next';
+import type { QuotaProviderFamily } from '@/utils/quota';
 import type {
   AntigravityQuotaState,
   AuthFileItem,
@@ -17,7 +18,12 @@ import type {
 
 export type QuotaUpdater<T> = T | ((prev: T) => T);
 
-export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'kimi' | 'xai';
+/**
+ * Alias of the family union declared in `@/utils/quota` — the row model and the
+ * family summary are pure helpers that sit below this feature, so the union
+ * lives there and this is the feature-local name for it.
+ */
+export type QuotaProviderType = QuotaProviderFamily;
 
 /** useQuotaStore 的结构契约（storeSelector/storeSetter 依赖）。 */
 export interface QuotaStore {
