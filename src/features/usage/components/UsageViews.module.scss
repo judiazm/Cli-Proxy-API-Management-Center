@@ -1,0 +1,632 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * The four views. Shared because they share a table: the same
+ * sticky header, the same right-aligned tabular figures, the
+ * same totals row. One stylesheet keeps them from drifting.
+ * ============================================================ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panelNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+
+  &:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+/* The one element allowed to scroll sideways; the page never does. */
+.scroller {
+  position: relative;
+  overflow: auto;
+  max-height: min(70vh, 720px);
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--bg-secondary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Sticky header rides the scroller, so the column names stay readable
+ * however far down a 500-row table the reader has gone. */
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.keyColumn {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  min-width: 190px;
+  max-width: 320px;
+}
+
+.table thead th.keyColumn {
+  z-index: 3;
+}
+
+.sortButton {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.sortActive {
+  color: var(--text-primary);
+}
+
+.sortArrow {
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.row {
+  &:hover td {
+    background: var(--bg-hover);
+  }
+}
+
+.childRow td {
+  background: color-mix(in srgb, var(--bg-tertiary) 45%, transparent);
+  color: var(--text-secondary);
+}
+
+.childRow:hover td {
+  background: var(--bg-hover);
+}
+
+.keyCell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.expandToggle {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: $radius-sm;
+  color: var(--text-tertiary);
+  flex: none;
+  transition: transform 160ms ease;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+}
+
+.expandOpen {
+  transform: rotate(180deg);
+}
+
+.expandSpacer {
+  width: 16px;
+  flex: none;
+}
+
+.childIndent {
+  width: 16px;
+  flex: none;
+}
+
+.keyText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.keyPrimary {
+  @include text-ellipsis;
+  font-weight: 560;
+  color: var(--text-primary);
+}
+
+.childRow .keyPrimary {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.keySecondary {
+  @include text-ellipsis;
+  font-size: 10.5px;
+  color: var(--text-quaternary);
+}
+
+.keyMono {
+  font-family: $font-mono;
+}
+
+/* A key cell that narrows the view when clicked reads as a control. */
+.drilldown {
+  @include button-reset;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  text-align: left;
+  border-radius: $radius-sm;
+  padding: 1px 3px;
+  margin: -1px -3px;
+
+  &:hover {
+    background: var(--primary-8);
+  }
+}
+
+.totalsRow td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-primary);
+  border-bottom: none;
+  font-weight: 620;
+  color: var(--text-primary);
+}
+
+.totalsRow td.keyColumn {
+  z-index: 3;
+  background: var(--bg-tertiary);
+}
+
+.shareBar {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 5px;
+  border-radius: $radius-full;
+  background: var(--border-color);
+  overflow: hidden;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.shareFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: $radius-full;
+  background: var(--primary-color);
+}
+
+.muted {
+  color: var(--text-quaternary);
+}
+
+.failureValue {
+  color: var(--danger-color);
+  font-weight: 570;
+}
+
+.statusOk {
+  color: var(--success-color);
+}
+
+.statusFail {
+  color: var(--danger-color);
+}
+
+/* ---------- timeline ---------- */
+
+.chart {
+  --chart-height: 240px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.legendItem {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 6px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  max-width: 240px;
+
+  &:hover {
+    background: var(--bg-tertiary);
+  }
+}
+
+.legendOff {
+  opacity: 0.45;
+}
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.legendName {
+  @include text-ellipsis;
+  min-width: 0;
+}
+
+.legendValue {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+.plot {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.yAxis {
+  position: relative;
+  width: 46px;
+  height: var(--chart-height);
+  flex: none;
+
+  @include mobile {
+    width: 34px;
+  }
+}
+
+.yTick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--chart-height);
+}
+
+.gridlines {
+  position: absolute;
+  inset: 0;
+}
+
+.gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-color);
+
+  &:last-child {
+    background: var(--border-primary);
+  }
+}
+
+.columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.column {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  cursor: default;
+}
+
+.stack {
+  position: relative;
+  width: 100%;
+  max-width: 28px;
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  animation: usageBarGrow 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: var(--bar-delay, 0ms);
+  transform-origin: bottom center;
+  transition: filter 120ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    transition: none;
+  }
+}
+
+.columnActive .stack {
+  filter: brightness(1.08);
+}
+
+.segment {
+  display: block;
+  width: 100%;
+
+  &:first-child {
+    border-radius: $radius-sm $radius-sm 0 0;
+  }
+}
+
+.idleTick {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: $radius-full;
+  background: var(--border-primary);
+}
+
+.emptyOverlay {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.tooltip {
+  position: absolute;
+  top: 4px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 11px;
+  min-width: 160px;
+  max-width: 260px;
+  border-radius: $radius-md;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop-filter);
+  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  box-shadow: var(--shadow-lg);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  transition:
+    left 200ms var(--ease-out-strong, ease-out),
+    transform 200ms var(--ease-out-strong, ease-out),
+    opacity 150ms ease-out;
+
+  @starting-style {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: opacity 150ms ease-out;
+  }
+}
+
+.tooltipTime {
+  font-weight: 640;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  b {
+    margin-left: auto;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.tooltipName {
+  @include text-ellipsis;
+  min-width: 0;
+}
+
+.tooltipTotal {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+
+  b {
+    margin-left: auto;
+    color: var(--text-primary);
+  }
+}
+
+.xAxis {
+  position: relative;
+  height: 16px;
+  margin-left: 54px;
+
+  @include mobile {
+    margin-left: 42px;
+  }
+}
+
+.xTick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- matrix ---------- */
+
+.matrixCell {
+  position: relative;
+  text-align: right;
+}
+
+/* The tint is a separate layer so the number keeps full contrast over it. */
+.heat {
+  position: absolute;
+  inset: 2px;
+  border-radius: $radius-sm;
+  background: var(--primary-color);
+  opacity: var(--heat, 0);
+  pointer-events: none;
+}
+
+.heatValue {
+  position: relative;
+  z-index: 1;
+}
+
+.axisSwap {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+
+  &:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+}
+
+/* ---------- requests log ---------- */
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 0;
+}
+
+.codeCell {
+  font-family: $font-mono;
+  font-size: 11.5px;
+}
+
+.timeCell {
+  text-align: left;
+  font-family: $font-mono;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.flagCell {
+  color: var(--text-tertiary);
+}
+
+@keyframes usageBarGrow {
+  from {
+    transform: scaleY(0.02);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
