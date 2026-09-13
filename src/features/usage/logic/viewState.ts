@@ -18,6 +18,7 @@
 
 import type { UsageFilters, UsageGroupColumn, UsageMetrics, UsageTimeBucket } from '@/services/api';
 import { USAGE_LIST_FILTERS } from '@/services/api';
+import { keyFingerprint } from './naming';
 import {
   DEFAULT_USAGE_METRIC,
   findUsageDimension,
@@ -206,7 +207,10 @@ export const writeUsageViewParams = (state: UsageViewState): URLSearchParams => 
 
   USAGE_LIST_FILTERS.forEach((name) => {
     (state.filters[name] ?? []).forEach((value) => {
-      if (value.trim()) params.append(name, value);
+      if (!value.trim()) return;
+      // A client key is a secret: the address bar carries its fingerprint, and
+      // the page expands it back to the key before querying the store.
+      params.append(name, name === 'api_key' ? keyFingerprint(value) : value);
     });
   });
   if (typeof state.filters.failed === 'boolean') {

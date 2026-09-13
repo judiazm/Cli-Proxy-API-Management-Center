@@ -373,3 +373,33 @@ describe('naming', () => {
     expect(resolveModelName('gpt-5.6-sol')).toEqual({ primary: 'gpt-5.6-sol', secondary: '' });
   });
 });
+
+describe('device fingerprints in the address bar', () => {
+  test('writeUsageViewParams stores the fingerprint, never the key', async () => {
+    const { writeUsageViewParams, readUsageViewState, DEFAULT_USAGE_VIEW } = await import(
+      '@/features/usage/logic/viewState'
+    );
+    const params = writeUsageViewParams({
+      ...DEFAULT_USAGE_VIEW,
+      filters: { api_key: ['b6d3936911cd06b46b2efbd89d324f46c722f437a0a3a357'] },
+    });
+    expect(params.getAll('api_key')).toEqual(['a3a357']);
+    expect(params.toString()).not.toContain('b6d39369');
+    expect(readUsageViewState(params).filters.api_key).toEqual(['a3a357']);
+  });
+
+  test('expandDeviceFilterValues turns a fingerprint back into the key', async () => {
+    const { buildDeviceIndex, expandDeviceFilterValues, resolveDeviceName } = await import(
+      '@/features/usage/logic/naming'
+    );
+    const index = buildDeviceIndex([
+      { key: 'b6d3936911cd06b46b2efbd89d324f46c722f437a0a3a357', label: 'hermes' },
+      { key: '89b757000000000000000000000000000000000000eebeea', label: 'mac' },
+    ] as never);
+    expect(expandDeviceFilterValues(['a3a357'], index)).toEqual([
+      'b6d3936911cd06b46b2efbd89d324f46c722f437a0a3a357',
+    ]);
+    expect(expandDeviceFilterValues(['nomatch'], index)).toEqual(['nomatch']);
+    expect(resolveDeviceName('a3a357', index)).toMatchObject({ kind: 'label', label: 'hermes' });
+  });
+});

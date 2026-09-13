@@ -35,6 +35,7 @@ import { useUsageView } from './hooks/useUsageView';
 import { formatUsageInstant } from './logic/formatUsage';
 import { emptyUsageMetrics } from './logic/metrics';
 import { applyUsageDrilldown, USAGE_TABS, type UsageTabId } from './logic/viewState';
+import { expandDeviceFilterValues } from './logic/naming';
 import styles from './UsagePage.module.scss';
 
 const TAB_LABEL_KEYS: Record<UsageTabId, string> = {
@@ -51,7 +52,13 @@ export function UsagePage() {
   const { view, patchView } = useUsageView();
   const names = useUsageNames();
   const labeller = useUsageLabels(names.devices, names.accounts);
-  const data = useUsageData(view);
+  // The URL carries device fingerprints; the store wants full keys.
+  const requestView = useMemo(() => {
+    const expanded = expandDeviceFilterValues(view.filters.api_key, names.devices);
+    if (!expanded || expanded.length === 0) return view;
+    return { ...view, filters: { ...view.filters, api_key: expanded } };
+  }, [view, names.devices]);
+  const data = useUsageData(requestView);
 
   const reload = useCallback(async () => {
     await Promise.all([data.reload(), names.reload()]);

@@ -54,9 +54,44 @@ export const buildDeviceIndex = (entries: readonly ApiKeyEntry[]): DeviceIndex =
   return index;
 };
 
+/**
+ * Entries whose key ends with the given fingerprint. A full key resolves to
+ * itself. Used so the address bar and filter chips can carry a fingerprint
+ * instead of the secret while the request to the store still uses the key.
+ */
+export const expandDeviceFingerprint = (value: string, index: DeviceIndex): string[] => {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  if (index.has(trimmed)) return [trimmed];
+  if (trimmed.length !== KEY_FINGERPRINT_LENGTH) return [trimmed];
+  const matches: string[] = [];
+  index.forEach((_entry, key) => {
+    if (key.endsWith(trimmed)) matches.push(key);
+  });
+  return matches.length > 0 ? matches : [trimmed];
+};
+
+export const expandDeviceFilterValues = (
+  values: readonly string[] | undefined,
+  index: DeviceIndex
+): string[] | undefined => {
+  if (!values || values.length === 0) return values ? [...values] : values;
+  const out: string[] = [];
+  values.forEach((value) => {
+    expandDeviceFingerprint(value, index).forEach((key) => {
+      if (!out.includes(key)) out.push(key);
+    });
+  });
+  return out;
+};
+
 export const resolveDeviceName = (apiKey: string, index: DeviceIndex): UsageDeviceName => {
   const fingerprint = keyFingerprint(apiKey);
-  const entry = index.get(apiKey);
+  let entry = index.get(apiKey);
+  if (!entry && apiKey.trim().length === KEY_FINGERPRINT_LENGTH) {
+    const candidates = expandDeviceFingerprint(apiKey, index);
+    if (candidates.length === 1) entry = index.get(candidates[0]);
+  }
   if (!entry) return { kind: 'unknown', fingerprint };
   if (entry.label) return { kind: 'label', label: entry.label, fingerprint };
   return { kind: 'fingerprint', fingerprint };
