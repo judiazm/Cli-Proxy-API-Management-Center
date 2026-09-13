@@ -340,7 +340,15 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   }
   const apiKeysRaw = raw['api-keys'];
   if (Array.isArray(apiKeysRaw)) {
-    config.apiKeys = apiKeysRaw.map((key) => String(key)).filter((key) => key.trim() !== '');
+    config.apiKeys = apiKeysRaw
+      .map((key) => {
+        if (typeof key === 'string') return key;
+        if (key && typeof key === 'object' && typeof (key as Record<string, unknown>)['api-key'] === 'string') {
+          return (key as Record<string, unknown>)['api-key'] as string;
+        }
+        return '';
+      })
+      .filter((key) => key.trim() !== '');
   }
 
   const geminiList = raw['gemini-api-key'];

@@ -73,7 +73,7 @@ export const apiKeysApi = {
   async list(): Promise<string[]> {
     const data = await apiClient.get<Record<string, unknown>>('/api-keys');
     const keys = data['api-keys'] ?? data.apiKeys;
-    return Array.isArray(keys) ? keys.map((key) => String(key)) : [];
+    return normalizeApiKeyEntries(keys).map((entry) => entry.key);
   },
 
   async listEntries(): Promise<ApiKeyEntry[]> {
