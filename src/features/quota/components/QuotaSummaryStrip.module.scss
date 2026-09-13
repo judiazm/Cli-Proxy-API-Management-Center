@@ -1,0 +1,254 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * 提供商家族汇总条 —— 与额度卡同配方（14px 圆角 / 1px 边框 / 82% 透感纸面），
+ * 但一张卡 = 一个提供商家族而不是一个凭证。
+ * 数字一律 mono + tabular-nums；条色只按剩余量三档。
+ * ============================================================ */
+
+/* flex 而非 grid：家族数量少时卡片按比例长大（但有上限，免得两张卡拉成横幅），
+ * 家族多时自动换行。auto-fill 网格会留下半屏空轨道。 */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  flex: 1 1 248px;
+  min-width: min(100%, 248px);
+  max-width: 420px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 15px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+}
+
+/* ---------- 头部：图标 + 家族名 + 凭证数 ---------- */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.iconWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+}
+
+.iconFallback {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.family {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  min-width: 0;
+  @include text-ellipsis;
+}
+
+.count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-family: $font-mono;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ---------- 绑定窗口聚合数字 ---------- */
+
+.windowLabel {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-tertiary);
+  @include text-ellipsis;
+}
+
+.figure {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.figureValue {
+  font-family: $font-mono;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.figureOf {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+/* ---------- 每凭证微条（顺序 = 下方列表顺序） ---------- */
+
+.bars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 1px;
+}
+
+.bar {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  border-radius: $radius-full;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: $radius-full;
+  transition: width 360ms var(--ease-out-strong, ease);
+  transform-origin: left center;
+  animation: quota-summary-fill 420ms var(--ease-out-strong, ease-out) both;
+  animation-delay: calc(var(--meter-index, 0) * 40ms);
+}
+
+@keyframes quota-summary-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.toneHigh {
+  background: var(--viz-success);
+}
+
+.toneMedium {
+  background: var(--quota-medium-color);
+}
+
+.toneLow {
+  background: var(--viz-failure);
+}
+
+/* 未加载 = 空轨道：不着色，避免把「还不知道」画成「中等」 */
+.toneUnknown {
+  background: transparent;
+}
+
+/* ---------- 最近一次恢复 ---------- */
+
+.reset {
+  min-width: 0;
+}
+
+.countdown {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-family: $font-mono;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.countdownRelative {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.countdownSeparator {
+  color: var(--text-quaternary);
+  user-select: none;
+}
+
+.countdownAbsolute {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+.countdownEmpty {
+  font-family: $font-mono;
+  font-size: 11.5px;
+  color: var(--text-quaternary);
+}
+
+/* ---------- 次级窗口（Claude 的普通 7 天） ---------- */
+
+.secondary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  min-width: 0;
+}
+
+.secondaryLabel {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  min-width: 0;
+  @include text-ellipsis;
+}
+
+.secondaryValue {
+  flex: 0 0 auto;
+  font-family: $font-mono;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.idle {
+  margin: 0;
+  font-family: $font-mono;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-quaternary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill {
+    transition: none;
+    animation: none;
+  }
+}
