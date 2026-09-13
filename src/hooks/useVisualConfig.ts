@@ -1483,7 +1483,21 @@ export function useVisualConfig() {
             .map((key) => key.trim())
             .filter(Boolean);
           if (apiKeys.length > 0) {
-            doc.setIn(['api-keys'], apiKeys);
+            // Object-form entries (api-key + allowed-models) must survive a save from
+            // the plain-text editor: keep the existing object for any key that is
+            // still listed, and only add new keys as plain strings.
+            const existingRaw = (doc.toJS() as Record<string, unknown>)['api-keys'];
+            const existingByKey = new Map<string, unknown>();
+            if (Array.isArray(existingRaw)) {
+              for (const item of existingRaw) {
+                const key = extractApiKeyValue(item);
+                if (key && item && typeof item === 'object') existingByKey.set(key, item);
+              }
+            }
+            doc.setIn(
+              ['api-keys'],
+              apiKeys.map((key) => existingByKey.get(key) ?? key),
+            );
           } else if (docHas(doc, ['api-keys'])) {
             doc.deleteIn(['api-keys']);
           }
