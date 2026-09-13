@@ -284,7 +284,9 @@ export const addUsageFilter = (
   name: (typeof USAGE_LIST_FILTERS)[number],
   value: string
 ): UsageFilters => {
-  const trimmed = value.trim();
+  // Device values are stored as fingerprints (see writeUsageViewParams), so a
+  // drill-down on the full key must compare against the fingerprint too.
+  const trimmed = name === 'api_key' ? keyFingerprint(value) : value.trim();
   if (!trimmed) return filters;
   const current = filters[name] ?? [];
   if (current.includes(trimmed)) return filters;

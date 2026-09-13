@@ -403,3 +403,11 @@ describe('device fingerprints in the address bar', () => {
     expect(resolveDeviceName('a3a357', index)).toMatchObject({ kind: 'label', label: 'hermes' });
   });
 });
+
+test('a repeated device drill-down does not add a second chip', async () => {
+  const { addUsageFilter } = await import('@/features/usage/logic/viewState');
+  const key = 'b6d3936911cd06b46b2efbd89d324f46c722f437a0a3a357';
+  const once = addUsageFilter({}, 'api_key', key);
+  expect(once.api_key).toEqual(['a3a357']);
+  expect(addUsageFilter(once, 'api_key', key)).toBe(once);
+});
