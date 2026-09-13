@@ -83,17 +83,32 @@ export const QUOTA_CLASS_KEYS: readonly (keyof QuotaClassMap)[] = [
   'quotaBarFillLow',
 ];
 
-/** 宿主 CSS Module → 类型化契约。缺键即抛（fail-loud），`source` 用于报错定位。 */
-export function bindQuotaClasses(module: Record<string, string>, source: string): QuotaClassMap {
-  const missing = QUOTA_CLASS_KEYS.filter((key) => !module[key]);
+/**
+ * 宿主 CSS Module → 类型化契约。缺键即抛（fail-loud），`source` 用于报错定位。
+ *
+ * A CSS Module import is typed as an open string index, so nothing at compile
+ * time says a host actually defines the class a component asks for. Binding an
+ * explicit key list converts that into one loud failure at module init, with
+ * every missing key named at once.
+ */
+export function bindClassMap<K extends string>(
+  keys: readonly K[],
+  module: Record<string, string>,
+  source: string
+): Record<K, string> {
+  const missing = keys.filter((key) => !module[key]);
   if (missing.length > 0) {
     throw new Error(`[quota] ${source} 缺少额度契约类名: ${missing.join(', ')}`);
   }
-  const bound = {} as Record<keyof QuotaClassMap, string>;
-  for (const key of QUOTA_CLASS_KEYS) {
+  const bound = {} as Record<K, string>;
+  for (const key of keys) {
     bound[key] = module[key];
   }
   return bound;
+}
+
+export function bindQuotaClasses(module: Record<string, string>, source: string): QuotaClassMap {
+  return bindClassMap(QUOTA_CLASS_KEYS, module, source);
 }
 
 export interface QuotaBodyProps<TState> {

@@ -1,14 +1,19 @@
 /**
- * 额度查询页：提供商 tabs + 统一卡网格。
+ * 额度查询页：家族汇总条 + 提供商 tabs + 紧凑凭证表 + 窗口时间线。
  *
  * 保留的行为契约（重设计不改）：
  * - 现有提供商保持点击加载；Devin 首次可见时主动查询一次，不轮询；
  * - cacheGeneration 会话隔离 + request-id 去重（见 useQuotaBatchLoader）；
  * - 文件列表变化后按 provider 剪枝额度缓存（已删文件不残留）；
  * - useHeaderRefresh 单槽位：本页唯一注册者，全局刷新 = 重取文件列表。
+ *
+ * 布局契约（本次重设计新增）：
+ * - 每个家族一套固定列，由该家族*全部*凭证（不只本页）的窗口并集决定，
+ *   所以翻页不会让同一个窗口换列；
+ * - 汇总条与表格共享排序后的顺序，微条第 n 根就是表格第 n 行。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { Button } from '@/components/ui/Button';
@@ -20,13 +25,24 @@ import { useNow } from '@/hooks/useNow';
 import { useRevealGroup } from '@/hooks/motion';
 import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
+import {
+  buildQuotaColumns,
+  buildQuotaFamilySummary,
+  buildQuotaRowModel,
+  maskCredentialName,
+  type QuotaColumn,
+  type QuotaCredentialRowModel,
+  type QuotaFamilyMember,
+  type QuotaFamilySummary,
+} from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
+import { getTypeLabel } from '@/features/authFiles/constants';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
-import { QuotaCard } from './components/QuotaCard';
+import { QuotaCredentialRow } from './components/QuotaCredentialRow';
+import { QuotaSummaryStrip } from './components/QuotaSummaryStrip';
 import { QuotaTimeline } from './components/QuotaTimeline';
 import {
-  CARD_ENTRANCE_BUDGET_MS,
   QUOTA_PAGE_SIZE,
   QUOTA_SORT_MODES,
   QUOTA_TAB_ORDER,
@@ -48,17 +64,42 @@ import type { QuotaProviderType } from './providers/types';
 import { useDevinQuotaAutoLoad } from './providers/devin/useDevinQuotaAutoLoad';
 import { useQuotaActions } from './hooks/useQuotaActions';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
-import { readQuotaUiState, writeQuotaUiState } from './uiState';
+import {
+  readQuotaShowEmails,
+  readQuotaUiState,
+  writeQuotaShowEmails,
+  writeQuotaUiState,
+} from './uiState';
 import styles from './QuotaPage.module.scss';
 
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
-const SKELETON_CARD_COUNT = 6;
+const SKELETON_ROW_COUNT = 5;
+
+const entryKey = (entry: QuotaFileEntry) =>
+  `${entry.type}:${getQuotaCacheKey(entry.file)}`;
 
 /**
- * Existing providers display filenames; Devin's card and timeline share an
- * identity-aware display label. Keep the filename fallback stable for memoization.
+ * Grid template for one family's rows: identity, one track per window, actions.
+ *
+ * Built here rather than in the row so every row in a section is handed the
+ * same string — that identity is what makes a column scannable. At least one
+ * track always exists so the idle/error block has somewhere to sit.
+ *
+ * The action track is a fixed width, not `auto`: `auto` is resolved per grid
+ * container, so a credential with no Reset button would size that track to one
+ * pill instead of two and push every cell in *its* row out of the column the
+ * rows above and below use.
  */
-const displayNameFor = (name: string) => name;
+const ACTIONS_TRACK = '248px';
+
+const rowColumnsTemplate = (columnCount: number): string =>
+  `minmax(200px, 1.4fr) repeat(${Math.max(1, columnCount)}, minmax(124px, 1fr)) ${ACTIONS_TRACK}`;
+
+interface QuotaFamilySection {
+  type: QuotaProviderType;
+  entries: QuotaFileEntry[];
+  columns: QuotaColumn[];
+}
 
 export function QuotaPage() {
   const { t } = useTranslation();
@@ -72,6 +113,7 @@ export function QuotaPage() {
   const [sortMode, setSortMode] = useState<QuotaSortMode>(
     () => readQuotaUiState()?.sortMode ?? 'default'
   );
+  const [showEmails, setShowEmails] = useState<boolean>(() => readQuotaShowEmails());
   const [page, setPage] = useState(1);
   // 页头 + tabs 的入场级联（标题 → meta → 动作 → tabs，级差 70ms）
   const revealRef = useRevealGroup<HTMLDivElement>();
@@ -150,10 +192,10 @@ export function QuotaPage() {
 
   /* ---------- 归类 / 过滤 / 排序 / 分页 ---------- */
 
-  // 只在「最快恢复优先」下订阅分钟时钟。默认序下不门控的话，pageItems 每分钟
-  // 换一次身份，会反复空转下面那个「刷新全部」的 loading 下降沿 effect。
-  const tick = useNow(sortMode !== 'default');
-  const sortNow = sortMode === 'default' ? 0 : tick;
+  // 倒计时与「最快恢复优先」共用同一个分钟时钟；默认序下 sortNow 固定为 0，
+  // 排序键不随分钟churn（时钟只驱动渲染中的相对时间）。
+  const now = useNow();
+  const sortNow = sortMode === 'default' ? 0 : now;
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
@@ -174,6 +216,61 @@ export function QuotaPage() {
     [sortedEntries, page]
   );
 
+  /* ---------- 行模型 / 家族列 / 汇总 ---------- */
+
+  const modelByKey = useMemo(() => {
+    const map = new Map<string, QuotaCredentialRowModel | null>();
+    for (const entry of sortedEntries) {
+      map.set(entryKey(entry), buildQuotaRowModel(entry.type, getQuota(entry)));
+    }
+    return map;
+  }, [sortedEntries, getQuota]);
+
+  /**
+   * 列并集按*全部*已过滤凭证算，不是按本页算 —— 否则翻一页同一个窗口可能换列，
+   * 而「一列可以竖着扫」正是这次重设计要买的东西。
+   */
+  const familyMembers = useMemo(() => {
+    const map = new Map<QuotaProviderType, QuotaFamilyMember[]>();
+    for (const entry of sortedEntries) {
+      const bucket = map.get(entry.type) ?? [];
+      bucket.push({ key: entryKey(entry), model: modelByKey.get(entryKey(entry)) ?? null });
+      map.set(entry.type, bucket);
+    }
+    return map;
+  }, [sortedEntries, modelByKey]);
+
+  const familyColumns = useMemo(() => {
+    const map = new Map<QuotaProviderType, QuotaColumn[]>();
+    for (const [type, members] of familyMembers) {
+      map.set(type, buildQuotaColumns(type, members));
+    }
+    return map;
+  }, [familyMembers]);
+
+  const summaries = useMemo<QuotaFamilySummary[]>(
+    () =>
+      QUOTA_TAB_ORDER.filter((type) => familyMembers.has(type)).map((type) =>
+        buildQuotaFamilySummary(type, familyMembers.get(type) ?? [], now)
+      ),
+    [familyMembers, now]
+  );
+
+  /** 本页凭证按家族分段；段内顺序即排序后的顺序。 */
+  const sections = useMemo<QuotaFamilySection[]>(() => {
+    const byType = new Map<QuotaProviderType, QuotaFileEntry[]>();
+    for (const entry of pageItems) {
+      const bucket = byType.get(entry.type) ?? [];
+      bucket.push(entry);
+      byType.set(entry.type, bucket);
+    }
+    return QUOTA_TAB_ORDER.filter((type) => byType.has(type)).map((type) => ({
+      type,
+      entries: byType.get(type) ?? [],
+      columns: familyColumns.get(type) ?? [],
+    }));
+  }, [pageItems, familyColumns]);
+
   const handleTabChange = useCallback((next: string) => {
     setTab(next as QuotaTabId);
     setPage(1);
@@ -185,6 +282,20 @@ export function QuotaPage() {
     setPage(1);
     writeQuotaUiState({ sortMode: next as QuotaSortMode });
   }, []);
+
+  const handleToggleEmails = useCallback(() => {
+    setShowEmails((current) => {
+      const next = !current;
+      writeQuotaShowEmails(next);
+      return next;
+    });
+  }, []);
+
+  /** 时间线泳道名 = 表格里的凭证名，两者必须一致（包括掩码状态）。 */
+  const displayNameFor = useCallback(
+    (name: string) => (showEmails ? name : maskCredentialName(name)),
+    [showEmails]
+  );
 
   const sortOptions = useMemo(
     () =>
@@ -277,24 +388,6 @@ export function QuotaPage() {
 
   const canUseActions = !disableControls && !loading && filesGeneration === sessionGeneration;
 
-  /* ---------- 首屏卡片一次性级联入场 ----------
-   * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过自己的
-   * 延迟（QuotaCard 内 useState 初始化），后续切 tab/翻页/刷新新挂载的卡片
-   * 拿到 null —— 不重播。 */
-
-  const [cardsAnimated, setCardsAnimated] = useState(false);
-  const enableCardEntrance = !cardsAnimated && !loading && pageItems.length > 0;
-  useEffect(() => {
-    if (enableCardEntrance) {
-      setCardsAnimated(true);
-    }
-  }, [enableCardEntrance]);
-  const cardEntranceDelay = (index: number): number | null => {
-    if (!enableCardEntrance) return null;
-    if (pageItems.length <= 1) return 0;
-    return Math.round((index / (pageItems.length - 1)) * CARD_ENTRANCE_BUDGET_MS);
-  };
-
   /* ---------- 渲染 ---------- */
 
   const isEmpty = !loading && filteredEntries.length === 0;
@@ -307,6 +400,8 @@ export function QuotaPage() {
         attentionCount={attentionCount}
         refreshing={loading || batchLoading}
         disableControls={disableControls}
+        showEmails={showEmails}
+        onToggleEmails={handleToggleEmails}
         onRefreshAll={handleRefreshAll}
       />
 
@@ -339,9 +434,9 @@ export function QuotaPage() {
         )}
 
         {loading ? (
-          <div className={styles.grid} aria-hidden="true">
-            {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
-              <Skeleton key={index} height={168} rounded={14} />
+          <div className={styles.skeletonList} aria-hidden="true">
+            {Array.from({ length: SKELETON_ROW_COUNT }, (_, index) => (
+              <Skeleton key={index} height={68} rounded={12} />
             ))}
           </div>
         ) : isEmpty ? (
@@ -365,21 +460,43 @@ export function QuotaPage() {
             }
           />
         ) : (
-          <div className={styles.grid}>
-            {pageItems.map((entry, index) => (
-              <QuotaCard
-                key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
-                entry={entry}
-                quota={getQuota(entry)}
-                resolvedTheme={resolvedTheme}
-                canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
-                entranceDelayMs={cardEntranceDelay(index)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-              />
+          <>
+            <QuotaSummaryStrip summaries={summaries} resolvedTheme={resolvedTheme} nowMs={now} />
+
+            {sections.map((section) => (
+              <section key={section.type} className={styles.family}>
+                <h2 className={styles.familyHeading}>
+                  {getTypeLabel(t, section.type)}
+                  <span className={styles.familyCount}>{section.entries.length}</span>
+                </h2>
+                <ul
+                  className={styles.rows}
+                  style={
+                    {
+                      '--quota-row-columns': rowColumnsTemplate(section.columns.length),
+                    } as CSSProperties
+                  }
+                >
+                  {section.entries.map((entry) => (
+                    <QuotaCredentialRow
+                      key={entryKey(entry)}
+                      entry={entry}
+                      quota={getQuota(entry)}
+                      model={modelByKey.get(entryKey(entry)) ?? null}
+                      columns={section.columns}
+                      resolvedTheme={resolvedTheme}
+                      showEmails={showEmails}
+                      canRefresh={canUseActions && !entry.file.disabled}
+                      resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+                      nowMs={now}
+                      onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                      onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-          </div>
+          </>
         )}
 
         {!loading && filteredEntries.length > QUOTA_PAGE_SIZE && (
