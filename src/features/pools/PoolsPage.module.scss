@@ -1,0 +1,138 @@
+@use '../../styles/mixins' as *;
+
+/* ============================================================
+ * 池视图壳层：页头 + 卡片流。视觉细节在 PoolCard.module.scss。
+ * ============================================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+/* ▍游标 + mono 遥测，与额度页头部同语汇 */
+.meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+
+  &::before {
+    content: '▍';
+    color: var(--text-quaternary);
+  }
+}
+
+.metaDot {
+  color: var(--text-quaternary);
+  user-select: none;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.secondaryAction {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  transition: background var(--dur-hover, 200ms) ease;
+
+  &:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.errorBanner {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger-color);
+  background: var(--bg-error-light);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+}
+
+/* flex 而非 grid：池少时卡片按比例长大（有上限，免得拉成横幅），池多时换行。 */
+/* flex-start, not stretch: a pool with one credential and one key should be a
+ * short card, not a tall one padded out to match its busiest neighbour. */
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.skeletonList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  > * {
+    flex: 1 1 280px;
+    min-width: min(100%, 280px);
+    max-width: 460px;
+  }
+}
+
+@include mobile {
+  .page {
+    gap: 16px;
+  }
+
+  .header {
+    align-items: stretch;
+  }
+
+  .actions {
+    width: 100%;
+  }
+}
