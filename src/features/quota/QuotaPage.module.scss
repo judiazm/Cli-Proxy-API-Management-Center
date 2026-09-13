@@ -71,15 +71,50 @@
   overflow-wrap: anywhere;
 }
 
-/* ---------- 卡片网格 ----------
- * 列宽由 CSS 决定（不再用 JS 测量）：额度卡承载水位条，取 340px 下限，
- * 与认证文件页配额模式（.gridQuota）同一档。 */
+/* ---------- 家族分段 + 紧凑行表 ----------
+ * 一个家族一段：标题 + 该家族全部凭证的行。列模板挂在 ul 上（内联
+ * --quota-row-columns），段内每一行共用，列才能上下对齐。
+ * 列装不下时整段横向滚动，而不是让某一行自己换行错位。 */
 
-.grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  align-items: stretch;
+.family {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.familyHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.familyCount {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  overflow-x: auto;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+}
+
+.skeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ---------- 分页 ---------- */
