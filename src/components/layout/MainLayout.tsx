@@ -25,6 +25,7 @@ import {
   IconSidebarLogs,
   IconSidebarOauth,
   IconSidebarPlugins,
+  IconSidebarPools,
   IconSidebarProviders,
   IconSidebarQuickStart,
   IconSidebarQuota,
@@ -62,6 +63,7 @@ const sidebarIcons: Record<string, ReactNode> = {
   oauth: <IconSidebarOauth size={18} />,
   quota: <IconSidebarQuota size={18} />,
   quotaForecast: <IconSidebarForecast size={18} />,
+  pools: <IconSidebarPools size={18} />,
   plugins: <IconSidebarPlugins size={18} />,
   pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
@@ -653,6 +655,12 @@ export function MainLayout() {
           labelKey: 'nav.quota_forecast',
           metaKey: 'nav_meta.quota_forecast',
           icon: sidebarIcons.quotaForecast,
+        },
+        {
+          path: '/pools',
+          labelKey: 'nav.pools',
+          metaKey: 'nav_meta.pools',
+          icon: sidebarIcons.pools,
         },
         {
           path: '/logs',

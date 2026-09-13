@@ -228,6 +228,18 @@ export const applyAuthFileWebsockets = (
   return next;
 };
 
+/**
+ * The model prefix stored in the credential's JSON.
+ *
+ * A prefixed credential only serves `<prefix>/<model>` and is skipped for
+ * unprefixed requests, so both the prefix editor and the pools view read it
+ * through here rather than each reaching into the raw field on its own.
+ * Returned verbatim: callers that compare against an edited value trim at the
+ * comparison, and normalizing here would make an untouched form look dirty.
+ */
+export const readAuthFilePrefix = (value: Record<string, unknown>): string =>
+  typeof value.prefix === 'string' ? value.prefix : '';
+
 export const supportsAuthFileUsingApi = (providerKey: string): boolean =>
   AUTH_FILE_USING_API_PROVIDERS.has(normalizeProviderKey(providerKey));
 

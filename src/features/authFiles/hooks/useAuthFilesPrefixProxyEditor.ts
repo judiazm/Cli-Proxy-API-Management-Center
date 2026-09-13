@@ -9,6 +9,7 @@ import {
   normalizeProviderKey,
   parsePriorityValue,
   readAuthFileDisableCooling,
+  readAuthFilePrefix,
   readAuthFileWebsockets,
   readAuthFileUsingApi,
   supportsAuthFileWebsockets,
@@ -555,7 +556,7 @@ export function useAuthFilesPrefixProxyEditor(
       const providerKey = normalizeProviderKey(
         String(json.type ?? json.provider ?? file.type ?? file.provider ?? '')
       );
-      const prefix = typeof json.prefix === 'string' ? json.prefix : '';
+      const prefix = readAuthFilePrefix(json);
       const proxyUrl = typeof json.proxy_url === 'string' ? json.proxy_url : '';
       const priority = parsePriorityValue(json.priority);
       const weight = readCredentialWeight(json.weight);
