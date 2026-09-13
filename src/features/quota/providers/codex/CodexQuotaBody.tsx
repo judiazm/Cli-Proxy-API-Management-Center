@@ -7,9 +7,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CodexQuotaState } from '@/types';
 import {
-  normalizePlanType,
+  codexPlanBadge,
   resolvePlanTier,
-  PREMIUM_CODEX_PLAN_TYPES,
   buildResetDisplay,
   formatInstantShort,
   parseIsoToMs,
@@ -48,20 +47,14 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
   const rateLimitResetCredits = quota.rateLimitResetCredits ?? [];
   const rateLimitResetCreditsError = quota.rateLimitResetCreditsError ?? '';
 
-  const getPlanLabel = (pt?: string | null): string | null => {
-    const normalized = normalizePlanType(pt);
-    if (!normalized) return null;
-    if (normalized === 'pro') return t('codex_quota.plan_pro');
-    if (PREMIUM_CODEX_PLAN_TYPES.has(normalized) && normalized !== 'pro') {
-      return t('codex_quota.plan_prolite');
-    }
-    if (normalized === 'plus') return t('codex_quota.plan_plus');
-    if (normalized === 'team') return t('codex_quota.plan_team');
-    if (normalized === 'free') return t('codex_quota.plan_free');
-    return pt || normalized;
-  };
-
-  const planLabel = getPlanLabel(planType);
+  // One source of truth for the plan mapping: the compact quota list reads the
+  // same badge through `codexPlanBadge`.
+  const planBadge = codexPlanBadge(planType);
+  const planLabel = planBadge
+    ? planBadge.labelKey
+      ? t(planBadge.labelKey)
+      : (planBadge.text ?? null)
+    : null;
   const planValueClass = getPlanValueClass(planType, classes);
 
   // Renewal was the one date on this card in a different shape (a full

@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { AntigravityQuotaState, AntigravityQuotaSubscription } from '@/types';
+import type { AntigravityQuotaState } from '@/types';
+import { antigravityLabelKey, antigravityPlanBadge } from '@/utils/quota';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { collectQuotaRowInstants, pickUrgentRowId } from '../../resetSchedule';
 import type { QuotaBodyProps } from '../../types';
@@ -52,30 +53,14 @@ const formatAntigravityResetLabel = (
   });
 };
 
-const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
-  ['gemini models', 'group_gemini_models'],
-  ['claude and gpt models', 'group_claude_gpt_models'],
-]);
-
-const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
-  ['weekly limit', 'weekly_limit'],
-  ['daily limit', 'daily_limit'],
-  ['5 hour limit', 'five_hour_limit'],
-  ['5-hour limit', 'five_hour_limit'],
-  ['five hour limit', 'five_hour_limit'],
-  ['monthly limit', 'monthly_limit'],
-]);
-
-const normalizeAntigravityQuotaText = (value: string): string =>
-  value.trim().toLowerCase().replace(/\s+/g, ' ');
-
+/** Lookup shared with the compact quota list (see `@/utils/quota/rowModel`). */
 const translateAntigravityQuotaLabel = (
   value: string,
-  keys: Map<string, string>,
+  scope: 'group' | 'bucket',
   t: TFunction
 ): string => {
-  const key = keys.get(normalizeAntigravityQuotaText(value));
-  return key ? t(`antigravity_quota.${key}`) : value;
+  const key = antigravityLabelKey(value, scope);
+  return key ? t(key) : value;
 };
 
 const translateAntigravityQuotaDescription = (
@@ -92,28 +77,16 @@ const translateAntigravityQuotaDescription = (
   return value;
 };
 
-const getAntigravityPlanLabel = (
-  subscription: AntigravityQuotaSubscription | null | undefined,
-  t: TFunction
-): string | null => {
-  if (!subscription) return null;
-  if (subscription.plan === 'free') return t('antigravity_subscription.plan_free');
-  if (subscription.plan === 'pro') return t('antigravity_subscription.plan_pro');
-  if (subscription.plan === 'ultra') return t('antigravity_subscription.plan_ultra');
-  if (subscription.plan === 'ultra-lite') return t('antigravity_subscription.plan_ultra_lite');
-  return (
-    subscription.tierName ||
-    subscription.tierId ||
-    (subscription.plan === 'unknown' ? t('antigravity_subscription.plan_unknown') : null)
-  );
-};
-
 export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<AntigravityQuotaState>) {
   const { t } = useTranslation();
   const groups = quota.groups ?? [];
-  const planLabel = getAntigravityPlanLabel(quota.subscription, t);
-  const normalizedPlan = quota.subscription?.plan?.toLowerCase() ?? '';
-  const isPremiumPlan = normalizedPlan === 'ultra' || normalizedPlan === 'ultra-lite';
+  const planBadge = antigravityPlanBadge(quota.subscription);
+  const planLabel = planBadge
+    ? planBadge.labelKey
+      ? t(planBadge.labelKey)
+      : (planBadge.text ?? null)
+    : null;
+  const isPremiumPlan = planBadge?.tier === 'premium';
   const serverTimeOffsetMs = quota.serverTimeOffsetMs ?? 0;
   const resetTimestamps = useMemo(
     () =>
@@ -168,11 +141,7 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
         <div className={classes.quotaMessage}>{t('antigravity_quota.empty_models')}</div>
       ) : (
         groups.map((group) => {
-          const groupLabel = translateAntigravityQuotaLabel(
-            group.label,
-            ANTIGRAVITY_GROUP_LABEL_KEYS,
-            t
-          );
+          const groupLabel = translateAntigravityQuotaLabel(group.label, 'group', t);
           const groupDescription = translateAntigravityQuotaDescription(group.description, t);
 
           return (
@@ -195,11 +164,7 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
                         percent: Math.round(percent),
                       });
                 const resetLabel = formatAntigravityResetLabel(bucket.resetTime, t, nowMs);
-                const bucketLabel = translateAntigravityQuotaLabel(
-                  bucket.label,
-                  ANTIGRAVITY_BUCKET_LABEL_KEYS,
-                  t
-                );
+                const bucketLabel = translateAntigravityQuotaLabel(bucket.label, 'bucket', t);
                 const bucketDescription = translateAntigravityQuotaDescription(
                   bucket.description,
                   t
