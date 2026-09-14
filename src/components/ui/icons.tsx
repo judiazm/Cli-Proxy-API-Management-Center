@@ -500,4 +500,13 @@ export function IconSidebarSystem({ size = 20, ...props }: IconProps) {
       <line x1="6" x2="6.01" y1="18" y2="18" />
     </svg>
   );
+}export function IconSidebarForecast({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M3 3v18h18" />
+      <path d="m7 15 4-4 3 3 5-7" />
+      <path d="M19 7v4" />
+      <path d="M19 7h-4" />
+    </svg>
+  );
 }
