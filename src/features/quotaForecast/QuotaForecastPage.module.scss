@@ -1,0 +1,233 @@
+@use '../../styles/mixins' as *;
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(26px, 3.2vw, 30px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.description {
+  max-width: 760px;
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.confidenceNote,
+.historyNote,
+.unknownNote {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.confidenceNote {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 11px;
+  background: var(--bg-warning-light);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+
+  > span,
+  > small {
+    color: var(--text-tertiary);
+    font-size: 11.5px;
+  }
+
+  > strong {
+    color: var(--text-primary);
+    font-family: $font-mono;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
+}
+
+.table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 12px 14px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  }
+
+  th {
+    color: var(--text-tertiary);
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+.accountName,
+.accountState,
+.metricValue,
+.metricUnit,
+.forecastText,
+.reportedBadge,
+.lowBadge,
+.unknownBadge {
+  display: block;
+}
+
+.accountName,
+.metricValue {
+  color: var(--text-primary);
+  font-family: $font-mono;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.accountName {
+  max-width: 220px;
+  font-weight: 600;
+  @include text-ellipsis;
+}
+
+.accountState,
+.metricUnit {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+}
+
+.forecastText {
+  max-width: 220px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reportedBadge,
+.lowBadge,
+.unknownBadge {
+  width: fit-content;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: $radius-full;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.reportedBadge {
+  color: var(--viz-success);
+  background: color-mix(in srgb, var(--viz-success) 11%, transparent);
+}
+
+.lowBadge {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-color) 14%, transparent);
+}
+
+.unknownBadge {
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-tertiary) 11%, transparent);
+}
+
+.confidenceNote .lowBadge {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.errorBanner {
+  padding: 10px 12px;
+  color: var(--danger-color);
+  background: var(--bg-error-light);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.skeletons {
+  display: grid;
+  gap: 14px;
+}
+
+.spinning {
+  animation: quota-forecast-spin 0.8s linear infinite;
+}
+
+@keyframes quota-forecast-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@include mobile {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

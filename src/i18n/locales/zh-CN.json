@@ -101,6 +101,7 @@
     "ai_providers": "AI 提供商",
     "auth_files": "认证文件",
     "oauth": "OAuth 登录",
+    "quota_forecast": "配额预测",
     "quota_management": "配额管理",
     "plugins": "插件管理",
     "plugin_store": "插件商店",
@@ -121,6 +122,7 @@
     "ai_providers": "上游模型路由",
     "auth_files": "Auth 文件与凭证",
     "oauth": "OAuth 授权登录",
+    "quota_forecast": "Codex 每周用尽预测",
     "quota_management": "API Key 与限额",
     "plugins": "插件启停与配置",
     "plugin_store": "发现并安装插件",
@@ -1581,6 +1583,7 @@
     "build_date": "构建时间",
     "version": "管理中心版本"
   },
+  "quota_forecast": {"title":"Codex 配额预测","description":"并列查看每个账户上报的每周配额、已记录的 token 用量和预计用尽时间。","load_failed":"无法加载配额预测","usage_failed":"无法读取用量历史","low_confidence":"低置信度","method_note":"用尽时间假设提供商上报的每周使用百分比继续按当前周期开始以来的平均速度增长。Token 历史单独显示，不会换算成配额上限。","summary_label":"Codex 配额预测摘要","this_week":"本周","daily_pace":"近期速度","tokens":"tokens","tokens_per_day":"tokens/天","at_risk":"有风险","before_reset":"个账户可能在重置前用尽","pool_eta":"凭证池预计时间","pool_eta_unknown":"各账户窗口不同，无法计算","account":"账户","provider_quota":"剩余配额","forecast":"预测","reset":"重置","reported":"提供商上报","unknown":"未知","codex_weekly":"Codex 每周限额","quota_error":"配额检查失败","outcome_exhausted":"配额已用尽","outcome_before_reset":"可能在 {{date}} 用尽","outcome_lasts":"可能可用到重置","reason_quota_not_loaded":"正在等待配额数据","reason_weekly_window_missing":"提供商未上报每周限额","reason_stale_window":"上报的重置时间已过期","reason_sparse_window":"周期刚开始，暂时无法预测","reason_no_consumption":"配额用量不足，暂时无法预测","reason_invalid_reading":"提供商数据无效","history_available":"近期速度基于 {{days}} 天的已存历史。历史较短时，速度波动会更大。","history_unknown":"无法确定历史数据长度，因此不显示每日速度。","usage_disabled":"用量存储已关闭。仍可查看提供商配额和重置时间，但不会记录 token 历史。","unknown_accounts":"有 {{count}} 个账户缺少足够的提供商数据，无法预测用尽时间。","empty_title":"没有 Codex 账户","empty_desc":"添加已启用的 Codex 凭证后即可预测每周配额。"},
   "providersPage": {
     "header": {
       "title": "AI 提供商",
