@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
   FORECAST_MIN_ELAPSED_MS,
+  buildClaudeQuotaForecast,
   buildCodexQuotaForecast,
   buildForecastUsageMetrics,
   firstUsageInstantMs,
   startOfLocalWeek,
 } from '@/features/quotaForecast/forecast';
-import type { CodexQuotaState } from '@/types';
+import type { ClaudeQuotaState, CodexQuotaState } from '@/types';
 import type { UsageMetrics, UsageSummaryResponse } from '@/services/api';
 
 const HOUR_MS = 60 * 60_000;
@@ -64,6 +65,45 @@ describe('buildCodexQuotaForecast', () => {
   });
 });
 
+const claudeQuota = (
+  usedPercent: number,
+  resetAtMs = NOW + 6 * 24 * HOUR_MS
+): ClaudeQuotaState => ({
+  status: 'success',
+  windows: [
+    {
+      id: 'seven-day-opus',
+      label: '7-day Opus limit',
+      usedPercent: 90,
+      resetLabel: 'Sep 20',
+      resetAtMs,
+      periodHours: 168,
+    },
+    {
+      id: 'seven-day',
+      label: '7-day limit',
+      usedPercent,
+      resetLabel: 'Sep 20',
+      resetAtMs,
+      periodHours: 168,
+    },
+  ],
+});
+
+describe('buildClaudeQuotaForecast', () => {
+  test('uses the account-wide seven-day window instead of a model-specific limit', () => {
+    const result = buildClaudeQuotaForecast(claudeQuota(10, NOW + 4 * 24 * HOUR_MS), NOW);
+    expect(result.usedPercent).toBe(10);
+    expect(result.outcome).toBe('lasts-to-reset');
+  });
+
+  test('reports a missing account-wide window when Claude only returns scoped limits', () => {
+    const quota = claudeQuota(10);
+    quota.windows = quota.windows.filter((window) => window.id !== 'seven-day');
+    expect(buildClaudeQuotaForecast(quota, NOW).reason).toBe('weekly-window-missing');
+  });
+});
+
 const emptyMetrics = (): UsageMetrics => ({
   requests: 0,
   failed: 0,
@@ -116,7 +156,7 @@ describe('buildForecastUsageMetrics', () => {
   });
 });
 
-test('firstUsageInstantMs finds the oldest matched Codex row', () => {
+test('firstUsageInstantMs finds the oldest matched account row', () => {
   const result = firstUsageInstantMs(
     summary([
       { authId: 'a.json', tokens: 100 },

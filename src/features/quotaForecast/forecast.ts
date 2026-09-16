@@ -1,4 +1,9 @@
-import type { CodexQuotaState, CodexQuotaWindow } from '@/types';
+import type {
+  ClaudeQuotaState,
+  ClaudeQuotaWindow,
+  CodexQuotaState,
+  CodexQuotaWindow,
+} from '@/types';
 import type { UsageSummaryResponse } from '@/services/api';
 
 export const FORECAST_MIN_ELAPSED_MS = 30 * 60_000;
@@ -7,7 +12,11 @@ export const WEEK_MS = 7 * 24 * 60 * 60_000;
 export type ForecastConfidence = 'reported' | 'estimated' | 'unknown';
 export type ForecastOutcome = 'exhausted' | 'before-reset' | 'lasts-to-reset' | 'unknown';
 
-export interface CodexQuotaForecast {
+export type ForecastProvider = 'claude' | 'codex';
+export type ForecastQuotaState = ClaudeQuotaState | CodexQuotaState;
+export type ForecastQuotaWindow = ClaudeQuotaWindow | CodexQuotaWindow;
+
+export interface QuotaForecast {
   confidence: ForecastConfidence;
   outcome: ForecastOutcome;
   usedPercent: number | null;
@@ -31,9 +40,9 @@ export interface ForecastUsageMetric {
 }
 
 const unknownForecast = (
-  reason: CodexQuotaForecast['reason'],
-  window?: CodexQuotaWindow
-): CodexQuotaForecast => ({
+  reason: QuotaForecast['reason'],
+  window?: ForecastQuotaWindow
+): QuotaForecast => ({
   confidence: 'unknown',
   outcome: 'unknown',
   usedPercent: window?.usedPercent ?? null,
@@ -60,6 +69,14 @@ export const findCodexWeeklyWindow = (
   );
 };
 
+/** Claude's account-wide seven-day window. Model-specific weekly windows are separate limits. */
+export const findClaudeWeeklyWindow = (
+  quota: ClaudeQuotaState | undefined
+): ClaudeQuotaWindow | null => {
+  if (!quota || quota.status !== 'success') return null;
+  return quota.windows.find((window) => window.id === 'seven-day') ?? null;
+};
+
 export const firstUsageInstantMs = (summary: UsageSummaryResponse | null): number | null => {
   let firstMs = Infinity;
   for (const row of summary?.rows ?? []) {
@@ -76,9 +93,23 @@ export const firstUsageInstantMs = (summary: UsageSummaryResponse | null): numbe
 export const buildCodexQuotaForecast = (
   quota: CodexQuotaState | undefined,
   nowMs: number
-): CodexQuotaForecast => {
+): QuotaForecast => buildQuotaForecast('codex', quota, nowMs);
+
+export const buildClaudeQuotaForecast = (
+  quota: ClaudeQuotaState | undefined,
+  nowMs: number
+): QuotaForecast => buildQuotaForecast('claude', quota, nowMs);
+
+export const buildQuotaForecast = (
+  provider: ForecastProvider,
+  quota: ForecastQuotaState | undefined,
+  nowMs: number
+): QuotaForecast => {
   if (!quota || quota.status !== 'success') return unknownForecast('quota-not-loaded');
-  const window = findCodexWeeklyWindow(quota);
+  const window =
+    provider === 'claude'
+      ? findClaudeWeeklyWindow(quota as ClaudeQuotaState)
+      : findCodexWeeklyWindow(quota as CodexQuotaState);
   if (!window) return unknownForecast('weekly-window-missing');
 
   const used = window.usedPercent;

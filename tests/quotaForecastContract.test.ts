@@ -15,10 +15,13 @@ describe('quota forecast page contract', () => {
     expect(layout).toContain("labelKey: 'nav.quota_forecast'");
   });
 
-  test('queries only Codex usage and keeps token history separate from quota math', () => {
+  test('queries Claude and Codex usage while keeping token history separate from quota math', () => {
     const page = read('src/features/quotaForecast/QuotaForecastPage.tsx');
     const forecast = read('src/features/quotaForecast/forecast.ts');
-    expect(page).toContain("filters: { provider: ['codex'] }");
+    expect(page).toContain("filters: { provider: ['claude', 'codex'] }");
+    expect(page).toContain(
+      "entry.type === 'claude' ? claudeQuota[cacheKey] : codexQuota[cacheKey]"
+    );
     expect(forecast).toContain("provider's own weekly percentage and elapsed cycle time");
     expect(forecast).not.toMatch(/total_tokens\s*\/\s*used/i);
   });
