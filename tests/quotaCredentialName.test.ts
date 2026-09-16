@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { displayCredentialName, maskCredentialName } from '@/utils/quota';
+import { displayCredentialLabel, displayCredentialName, maskCredentialName } from '@/utils/quota';
 
 describe('maskCredentialName', () => {
   test('keeps the provider prefix and account hash, masks mailbox and domain', () => {
@@ -48,5 +48,19 @@ describe('displayCredentialName', () => {
     const name = 'claude-3701ed41-judiazm@outlook.com.json';
     expect(displayCredentialName(name, true)).toBe(name);
     expect(displayCredentialName(name, false)).toBe(maskCredentialName(name));
+  });
+});
+
+describe('displayCredentialLabel', () => {
+  const name = 'codex-6810b467-jdiaz@miamiweb.ai-pro.json';
+
+  test('uses a saved nickname instead of the credential filename', () => {
+    expect(displayCredentialLabel(name, 'Miami Web AI', false)).toBe('Miami Web AI');
+    expect(displayCredentialLabel(name, 'Miami Web AI', true)).toBe('Miami Web AI');
+  });
+
+  test('falls back to the privacy-aware filename when the nickname is empty', () => {
+    expect(displayCredentialLabel(name, '  ', false)).toBe(maskCredentialName(name));
+    expect(displayCredentialLabel(name, undefined, true)).toBe(name);
   });
 });

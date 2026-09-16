@@ -29,13 +29,13 @@ import {
   buildQuotaColumns,
   buildQuotaFamilySummary,
   buildQuotaRowModel,
-  maskCredentialName,
+  displayCredentialLabel,
   type QuotaColumn,
   type QuotaCredentialRowModel,
   type QuotaFamilyMember,
   type QuotaFamilySummary,
 } from '@/utils/quota';
-import { getQuotaCacheKey } from '@/utils/quota/identity';
+import { getQuotaCacheKey, getQuotaDisplayName } from '@/utils/quota/identity';
 import { getTypeLabel } from '@/features/authFiles/constants';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
@@ -293,8 +293,13 @@ export function QuotaPage() {
 
   /** 时间线泳道名 = 表格里的凭证名，两者必须一致（包括掩码状态）。 */
   const displayNameFor = useCallback(
-    (name: string) => (showEmails ? name : maskCredentialName(name)),
-    [showEmails]
+    (name: string) => {
+      const entry = entries.find((candidate) => candidate.file.name === name);
+      return entry
+        ? displayCredentialLabel(getQuotaDisplayName(entry.file), entry.file.note, showEmails)
+        : displayCredentialLabel(name, undefined, showEmails);
+    },
+    [entries, showEmails]
   );
 
   const sortOptions = useMemo(
