@@ -14,6 +14,7 @@ import {
 } from '@/services/api';
 import { useAuthStore, useQuotaStore } from '@/stores';
 import { displayCredentialLabel } from '@/utils/quota';
+import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { browserTimeZone, parseInstantMs } from '@/features/usage/logic/timeRange';
 import { formatUsageCount, formatUsageExact } from '@/features/usage/logic/formatUsage';
 import { useQuotaBatchLoader } from '@/features/quota/hooks/useQuotaBatchLoader';
@@ -21,11 +22,12 @@ import { classifyQuotaFiles, type QuotaFileEntry } from '@/features/quota/logic'
 import { readQuotaShowEmails } from '@/features/quota/uiState';
 import {
   WEEK_MS,
-  buildCodexQuotaForecast,
+  buildQuotaForecast,
   buildForecastUsageMetrics,
   firstUsageInstantMs,
   startOfLocalWeek,
-  type CodexQuotaForecast,
+  type ForecastProvider,
+  type QuotaForecast,
 } from './forecast';
 import styles from './QuotaForecastPage.module.scss';
 
@@ -37,14 +39,20 @@ const describeError = (error: unknown, fallback: string): string =>
 const formatPercent = (value: number | null): string =>
   value === null ? '--' : `${Math.round(value)}%`;
 
+type ForecastEntry = QuotaFileEntry & { type: ForecastProvider };
+
+const isForecastEntry = (entry: QuotaFileEntry): entry is ForecastEntry =>
+  entry.type === 'claude' || entry.type === 'codex';
+
 export function QuotaForecastPage() {
   const { t, i18n } = useTranslation();
   const revealRef = useRevealGroup<HTMLDivElement>();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const claudeQuota = useQuotaStore((state) => state.claudeQuota);
   const codexQuota = useQuotaStore((state) => state.codexQuota);
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
 
-  const [entries, setEntries] = useState<QuotaFileEntry[]>([]);
+  const [entries, setEntries] = useState<ForecastEntry[]>([]);
   const [currentWeek, setCurrentWeek] = useState<UsageSummaryResponse | null>(null);
   const [recent, setRecent] = useState<UsageSummaryResponse | null>(null);
   const [observedRecentMs, setObservedRecentMs] = useState(0);
@@ -66,10 +74,8 @@ export function QuotaForecastPage() {
 
     try {
       const files = await authFilesApi.list();
-      const codexEntries = classifyQuotaFiles(files?.files ?? []).filter(
-        (entry) => entry.type === 'codex'
-      );
-      setEntries(codexEntries);
+      const forecastEntries = classifyQuotaFiles(files?.files ?? []).filter(isForecastEntry);
+      setEntries(forecastEntries);
 
       const usageTask = (async () => {
         try {
@@ -88,7 +94,7 @@ export function QuotaForecastPage() {
               to: now,
               tz: timeZone,
               groupBy: ['auth_id'],
-              filters: { provider: ['codex'] },
+              filters: { provider: ['claude', 'codex'] },
               limit: 500,
             }),
             usageStoreApi.getSummary({
@@ -96,7 +102,7 @@ export function QuotaForecastPage() {
               to: now,
               tz: timeZone,
               groupBy: ['auth_id'],
-              filters: { provider: ['codex'] },
+              filters: { provider: ['claude', 'codex'] },
               limit: 500,
             }),
           ]);
@@ -123,7 +129,7 @@ export function QuotaForecastPage() {
         }
       })();
 
-      await Promise.all([usageTask, loadQuota(codexEntries)]);
+      await Promise.all([usageTask, loadQuota(forecastEntries)]);
     } catch (failure: unknown) {
       setError(describeError(failure, t('quota_forecast.load_failed')));
       setEntries([]);
@@ -150,13 +156,17 @@ export function QuotaForecastPage() {
 
   const rows = useMemo(
     () =>
-      entries.map((entry) => ({
-        entry,
-        quota: codexQuota[entry.file.name],
-        forecast: buildCodexQuotaForecast(codexQuota[entry.file.name], nowMs),
-        usage: metrics.get(entry.file.name),
-      })),
-    [entries, codexQuota, metrics, nowMs]
+      entries.map((entry) => {
+        const cacheKey = getQuotaCacheKey(entry.file);
+        const quota = entry.type === 'claude' ? claudeQuota[cacheKey] : codexQuota[cacheKey];
+        return {
+          entry,
+          quota,
+          forecast: buildQuotaForecast(entry.type, quota, nowMs),
+          usage: metrics.get(entry.file.name),
+        };
+      }),
+    [entries, claudeQuota, codexQuota, metrics, nowMs]
   );
 
   const totals = useMemo(
@@ -179,7 +189,7 @@ export function QuotaForecastPage() {
           minute: '2-digit',
         });
 
-  const forecastText = (forecast: CodexQuotaForecast): string => {
+  const forecastText = (forecast: QuotaForecast): string => {
     switch (forecast.outcome) {
       case 'exhausted':
         return t('quota_forecast.outcome_exhausted');
@@ -301,7 +311,9 @@ export function QuotaForecastPage() {
                       <span className={styles.accountState}>
                         {quota?.status === 'error'
                           ? t('quota_forecast.quota_error')
-                          : t('quota_forecast.codex_weekly')}
+                          : entry.type === 'claude'
+                            ? t('quota_forecast.claude_weekly')
+                            : t('quota_forecast.codex_weekly')}
                       </span>
                     </td>
                     <td>
