@@ -388,7 +388,7 @@
     "using_api_hint": "Use the official xAI API when enabled; use Grok CLI chat-proxy when disabled.",
     "note_label": "Note",
     "note_placeholder": "Enter a note, e.g.: John's account",
-    "note_hint": "Optional. Used to describe the purpose or owner of this credential; leave empty to omit.",
+    "note_hint": "Optional. Used as the display name on quota pages and as a note in Auth Files.",
     "excluded_models_label": "Excluded models (excluded_models)",
     "headers_label": "Custom Headers (headers)",
     "headers_placeholder": "{\n  \"Header-Name\": \"value\"\n}",

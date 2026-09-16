@@ -20,7 +20,7 @@ import { IconRefreshCw } from '@/components/ui/icons';
 import type { ResolvedTheme } from '@/types';
 import {
   MANUAL_RESETS_COLUMN_ID,
-  displayCredentialName,
+  displayCredentialLabel,
   formatInstantShort,
   resolveQuotaErrorMessage,
   type QuotaColumn,
@@ -116,7 +116,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
   const loading = status === 'loading';
   const iconSrc = getAuthFileIcon(entry.type, resolvedTheme);
   const typeLabel = getTypeLabel(t, entry.type);
-  const displayName = displayCredentialName(getQuotaDisplayName(file), showEmails);
+  const displayName = displayCredentialLabel(getQuotaDisplayName(file), file.note, showEmails);
   const errorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,

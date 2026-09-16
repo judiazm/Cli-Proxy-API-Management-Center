@@ -13,7 +13,7 @@ import {
   type UsageSummaryResponse,
 } from '@/services/api';
 import { useAuthStore, useQuotaStore } from '@/stores';
-import { displayCredentialName } from '@/utils/quota';
+import { displayCredentialLabel } from '@/utils/quota';
 import { browserTimeZone, parseInstantMs } from '@/features/usage/logic/timeRange';
 import { formatUsageCount, formatUsageExact } from '@/features/usage/logic/formatUsage';
 import { useQuotaBatchLoader } from '@/features/quota/hooks/useQuotaBatchLoader';
@@ -296,7 +296,7 @@ export function QuotaForecastPage() {
                   <tr key={entry.file.name}>
                     <td>
                       <span className={styles.accountName}>
-                        {displayCredentialName(entry.file.name, showEmails)}
+                        {displayCredentialLabel(entry.file.name, entry.file.note, showEmails)}
                       </span>
                       <span className={styles.accountState}>
                         {quota?.status === 'error'
