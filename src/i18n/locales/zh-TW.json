@@ -385,7 +385,7 @@
     "using_api_hint": "開啟後使用 xAI 官方 API；關閉時使用 Grok CLI chat-proxy。",
     "note_label": "備註（note）",
     "note_placeholder": "輸入備註資訊，例如：張三的帳號",
-    "note_hint": "選填，用於標記憑證用途或歸屬；留空則不寫入。",
+    "note_hint": "選填。在配額頁面中用作顯示名稱，也會作為認證檔案備註保存。",
     "excluded_models_label": "排除模型（excluded_models）",
     "headers_label": "自訂請求標頭（headers）",
     "headers_placeholder": "{\n  \"Header-Name\": \"value\"\n}",

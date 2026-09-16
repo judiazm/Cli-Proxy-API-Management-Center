@@ -69,3 +69,16 @@ export function maskCredentialName(name: string): string {
 /** Masked unless the viewer has explicitly asked to see addresses. */
 export const displayCredentialName = (name: string, showEmails: boolean): string =>
   showEmails ? name : maskCredentialName(name);
+
+/**
+ * Prefer the optional auth-file note as a human-friendly label, while keeping
+ * the filename as the stable fallback and privacy-controlled identity.
+ */
+export function displayCredentialLabel(
+  name: string,
+  nickname: unknown,
+  showEmails: boolean
+): string {
+  const label = typeof nickname === 'string' ? nickname.trim() : '';
+  return label || displayCredentialName(name, showEmails);
+}
