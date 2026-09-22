@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
+import { IconSearch, IconX } from '@/components/ui/icons';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
@@ -118,6 +118,7 @@ export function QuotaPage() {
   const [showEmails, setShowEmails] = useState<boolean>(() => readQuotaShowEmails());
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   // 页头 + tabs 的入场级联（标题 → meta → 动作 → tabs，级差 70ms）
   const revealRef = useRevealGroup<HTMLDivElement>();
 
@@ -423,8 +424,7 @@ export function QuotaPage() {
       />
 
       <section className={styles.workbench}>
-        {/* tabs + 排序作为一个整体入场（useRevealGroup 会给每个 [data-reveal]
-            后代加一级级差，所以排序控件放在同一个节点里而不是做兄弟） */}
+        {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
         <div className={styles.tabsRow} data-reveal>
           <ProviderTabs
             types={TAB_IDS}
@@ -433,6 +433,35 @@ export function QuotaPage() {
             resolvedTheme={resolvedTheme}
             onChange={handleTabChange}
           />
+        </div>
+
+        <div className={styles.toolbar}>
+          <div className={styles.search}>
+            <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
+            <input
+              ref={searchInputRef}
+              className={styles.searchInput}
+              type="search"
+              value={search}
+              onChange={(event) => handleSearchChange(event.target.value)}
+              placeholder={t('quota_management.search_placeholder')}
+              aria-label={t('quota_management.search_label')}
+            />
+            {search && (
+              <button
+                type="button"
+                className={styles.clearSearch}
+                aria-label={t('quota_management.search_clear')}
+                title={t('quota_management.search_clear')}
+                onClick={() => {
+                  handleSearchChange('');
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <IconX size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <div className={styles.sort}>
             <Select
               value={sortMode}
@@ -442,16 +471,6 @@ export function QuotaPage() {
               size="sm"
             />
           </div>
-        </div>
-
-        <div className={styles.search}>
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => handleSearchChange(event.target.value)}
-            placeholder={t('quota_management.search_placeholder')}
-            aria-label={t('quota_management.search_label')}
-          />
         </div>
 
         {error && (
