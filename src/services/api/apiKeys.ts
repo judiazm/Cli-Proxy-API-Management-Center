@@ -1,8 +1,14 @@
-/**
- * API 密钥管理
- */
-
+/** Client access keys are a direct config list, not upstream provider groups. */
 import { apiClient } from './client';
+import { getConfigValue, guardConfigConnection } from './configValue';
+
+const PATH = '/config/access/api-keys';
+
+const assertIndex = (keys: unknown[], index: number): void => {
+  if (!Number.isInteger(index) || index < 0 || index >= keys.length) {
+    throw new RangeError('API key index out of range');
+  }
+};
 
 /**
  * One `api-keys` entry as the fork's proxy accepts it.
@@ -71,19 +77,38 @@ export const normalizeApiKeyEntries = (payload: unknown): ApiKeyEntry[] => {
 
 export const apiKeysApi = {
   async list(): Promise<string[]> {
-    const data = await apiClient.get<Record<string, unknown>>('/api-keys');
-    const keys = data['api-keys'] ?? data.apiKeys;
-    return normalizeApiKeyEntries(keys).map((entry) => entry.key);
+    const data = await getConfigValue<unknown>(PATH, []);
+    return normalizeApiKeyEntries(data).map((entry) => entry.key);
   },
 
   async listEntries(): Promise<ApiKeyEntry[]> {
-    const data = await apiClient.get<Record<string, unknown>>('/api-keys');
-    return normalizeApiKeyEntries(data['api-keys'] ?? data.apiKeys);
+    const data = await getConfigValue<unknown>(PATH, []);
+    return normalizeApiKeyEntries(data);
+
   },
 
-  replace: (keys: string[]) => apiClient.put('/api-keys', keys),
+  replace: (keys: unknown[]) => apiClient.put(PATH, keys),
 
-  update: (index: number, value: string) => apiClient.patch('/api-keys', { index, value }),
+  async update(index: number, value: string) {
+    const assertConnection = guardConfigConnection();
+    const raw = await getConfigValue<unknown>(PATH, []);
+    assertConnection();
+    const keys = Array.isArray(raw) ? [...raw] : [];
+    assertIndex(keys, index);
+    const entry = keys[index];
+    keys[index] = entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? { ...entry, 'api-key': value }
+      : value;
+    return apiKeysApi.replace(keys);
+  },
 
-  delete: (index: number) => apiClient.delete(`/api-keys?index=${index}`),
+  async delete(index: number) {
+    const assertConnection = guardConfigConnection();
+    const raw = await getConfigValue<unknown>(PATH, []);
+    assertConnection();
+    const keys = Array.isArray(raw) ? [...raw] : [];
+    assertIndex(keys, index);
+    keys.splice(index, 1);
+    return apiKeysApi.replace(keys);
+  },
 };

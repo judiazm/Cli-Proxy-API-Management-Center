@@ -79,7 +79,7 @@ describe('CodexQuotaBody', () => {
   );
 
   test.each([
-    ['pro', 'Pro 20x', 'elitePlanValue'],
+    ['pro', 'Pro', 'elitePlanValue'],
     ['prolite', 'Pro 5x', 'premiumPlanValue'],
     ['team', 'Team', 'codexPlanValue'],
     ['self_serve_business_usage_based', 'self_serve_business_usage_based', 'codexPlanValue'],

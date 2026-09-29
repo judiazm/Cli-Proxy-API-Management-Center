@@ -96,19 +96,20 @@ describe('privacy and navigation behavior contract', () => {
 
 describe('object-form API key preservation', () => {
   test('a visual config save retains labels and allowlists on keys that remain listed', () => {
-    const source = `api-keys:
-  - api-key: fixture-mac-key
-    label: Mac
-    allowed-models:
-      - gpt-*
-  - fixture-plain-key
+    const source = `access:
+  api-keys:
+    - api-key: fixture-mac-key
+      label: Mac
+      allowed-models:
+        - gpt-*
+    - fixture-plain-key
 `;
     const config = runVisualConfig(source, [
       { apiKeysText: 'fixture-mac-key\nfixture-plain-key\nfixture-new-key' },
     ]);
     const saved = parseYaml(config.applyVisualChangesToYaml(source));
 
-    expect(saved['api-keys']).toEqual([
+    expect(saved.access['api-keys']).toEqual([
       {
         'api-key': 'fixture-mac-key',
         label: 'Mac',
