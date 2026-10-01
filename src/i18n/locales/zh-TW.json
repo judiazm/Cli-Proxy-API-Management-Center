@@ -1436,6 +1436,11 @@
     "empty_desc": "新增憑證後即可查看哪些用戶端金鑰可以存取它。"
   },
   "usage": {
+    "status_rate_limit": "速率限制回應",
+    "status_auth_rejection": "身分驗證或權限回應",
+    "status_http_5xx": "HTTP 5xx 回應",
+    "status_http_4xx": "HTTP 4xx 回應",
+    "status_no_http": "失敗；未記錄 HTTP 狀態",
     "title": "用量",
     "meta_rows": "已存 {{count}} 筆請求",
     "range_label": "{{from}} 至 {{to}}",
@@ -1787,7 +1792,7 @@
     "build_date": "建置時間",
     "version": "管理中心版本"
   },
-  "quota_forecast": {"title":"配額預測","description":"並列查看每個 Claude 和 Codex 帳戶回報的每週配額、已記錄的 token 用量和預計用盡時間。","load_failed":"無法載入配額預測","usage_failed":"無法讀取用量歷史","low_confidence":"低信心","method_note":"用盡時間假設供應商回報的每週使用百分比繼續按目前週期開始以來的平均速度增加。Token 歷史會分開顯示，不會換算成配額上限。","summary_label":"Claude 與 Codex 配額預測摘要","this_week":"本週","daily_pace":"近期速度","tokens":"tokens","tokens_per_day":"tokens/天","at_risk":"有風險","before_reset":"個帳戶可能在重設前用盡","pool_eta":"憑證池預計時間","pool_eta_unknown":"各帳戶視窗不同，無法計算","account":"帳戶","provider_quota":"剩餘配額","forecast":"預測","reset":"重設","reported":"供應商回報","unknown":"未知","claude_weekly":"Claude 每週限額","codex_weekly":"Codex 每週限額","quota_error":"配額檢查失敗","outcome_exhausted":"配額已用盡","outcome_before_reset":"可能在 {{date}} 用盡","outcome_lasts":"可能可用到重設","reason_quota_not_loaded":"正在等待配額資料","reason_weekly_window_missing":"供應商未回報每週限額","reason_stale_window":"回報的重設時間已過期","reason_sparse_window":"週期剛開始，暫時無法預測","reason_no_consumption":"配額用量不足，暫時無法預測","reason_invalid_reading":"供應商資料無效","history_available":"近期速度使用 {{days}} 天的已存歷史。歷史較短時，速度波動會更大。","history_unknown":"無法確定歷史資料長度，因此不顯示每日速度。","usage_disabled":"用量存儲已關閉。仍可查看供應商配額和重設時間，但不會記錄 token 歷史。","unknown_accounts":"有 {{count}} 個帳戶缺少足夠的供應商資料，無法預測用盡時間。","empty_title":"沒有 Claude 或 Codex 帳戶","empty_desc":"新增已啟用的 Claude 或 Codex 憑證後即可預測每週配額。"},
+  "quota_forecast": {"title":"配額預測","description":"查看 Claude 和 Codex 每週配額、觀測到的配額變化與已記錄的請求用量。","load_failed":"無法載入配額預測","usage_failed":"無法讀取用量歷史","low_confidence":"低信心","method_note":"耗盡時間根據目前週期最近 24 小時內供應商回報的配額變化估算，至少需要跨越 30 分鐘的三次觀測。信心程度表示觀測覆蓋程度和速率穩定性，並非經過測量的機率。權杖用量單獨顯示。","summary_label":"Claude 與 Codex 配額預測摘要","this_week":"本週","daily_pace":"近期速度","tokens":"tokens","tokens_per_day":"tokens/天","at_risk":"有風險","before_reset":"個帳戶可能在重設前用盡","pool_eta":"憑證池預計時間","pool_eta_unknown":"各帳戶視窗不同，無法計算","account":"帳戶","provider_quota":"剩餘配額","forecast":"預測","reset":"重設","reported":"供應商回報","unknown":"未知","claude_weekly":"Claude 每週限額","codex_weekly":"Codex 每週限額","quota_error":"配額檢查失敗","outcome_exhausted":"配額已用盡","outcome_before_reset":"可能在 {{date}} 用盡","outcome_lasts":"依觀測速率可持續到重設","reason_quota_not_loaded":"正在等待配額資料","reason_weekly_window_missing":"供應商未回報每週限額","reason_stale_window":"回報的重設時間已過期","reason_sparse_window":"週期剛開始，暫時無法預測","reason_no_consumption":"配額用量不足，暫時無法預測","reason_invalid_reading":"供應商資料無效","history_available":"近期權杖速率從各帳戶最近七天內的首筆已記錄請求計算。較短的歷史可能高估每日速率。","history_unknown":"用量歷史無法取得，權杖總量和每日速率未知。","usage_disabled":"用量儲存已關閉，配額觀測歷史和權杖用量無法取得。","unknown_accounts":"有 {{count}} 個帳戶缺少足夠的供應商資料，無法預測用盡時間。","empty_title":"沒有 Claude 或 Codex 帳戶","empty_desc":"新增已啟用的 Claude 或 Codex 憑證後即可預測每週配額。","local_week_note":"本週指本地時間週一到上次重新整理，與各供應商的配額週期分開計算。","estimated":"觀測估算","moderate_confidence":"中等信心程度","history_failed":"無法讀取配額觀測歷史","reason_stale_reading":"最近一次配額觀測已超過 30 分鐘","reason_history_building":"正在累積配額歷史：需要跨越 30 分鐘的三次觀測","reason_history_truncated":"配額歷史不完整，無法顯示估算","reason_history_unavailable":"配額觀測歷史無法取得","reason_no_growth":"觀測期間沒有可測量的配額增長","reason_reset_detected":"偵測到配額重設或修正，正在累積新歷史","observation_context":"{{hours}} 小時內 {{count}} 次觀測 · 最近觀測於 {{minutes}} 分鐘前","quota_pace":"每天使用 {{percent}} 個配額百分點","reset_excluded":"已排除之前的配額週期或修正前資料","usage_span":"已觀測 {{days}} 天","request_context":"最近 7 天：{{requests}} 次請求，{{failed}} 次失敗","reason_store_losses":"儲存回報有記錄遺失，已暫停配額估算","imported_readings":"包含精度較低的匯入觀測"},
   "providersPage": {
     "groups": {
       "rowHint": "未修改的欄位保留組繼承。修改基礎 URL 將影響組內所有金鑰。新增行會建立新組。"

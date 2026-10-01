@@ -132,5 +132,16 @@ describe('both-provider forecast contract', () => {
     expect(forecast).toContain("window.id === 'seven-day'");
     expect(forecast).toContain("window.id === 'weekly'");
     expect(forecast).toContain('Token history remains context only');
+    const historyClient = read('src/services/api/quotaHistory.ts');
+    expect(historyClient).toContain('/usage-store/quota-history');
+    expect(historyClient).toContain('observed_at_ms');
+    expect(page).toContain('quotaHistoryApi.getHistory');
+    expect(page).toContain('authIndex: entry.file.authIndex');
+    expect(page).toContain('meta.health.persistence_failed_rows');
+    expect(forecast).toContain('latest.used_percent - first.used_percent');
+    expect(forecast).toContain('context.history.truncated');
+    expect(forecast).toContain("unknownForecast('store-losses'");
+    expect(forecast).toContain('FORECAST_MAX_AGE_MS');
+    expect(forecast).toContain('includesImportedReadings');
   });
 });

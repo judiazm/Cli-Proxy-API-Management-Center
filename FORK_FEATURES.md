@@ -56,8 +56,25 @@ Current release commits: `7d68fac` for Codex and `b36e4e5` for Claude, rebased f
 - The route is `/quota-forecast` and the Observe navigation key is `nav.quota_forecast`.
 - `src/features/quotaForecast/QuotaForecastPage.tsx` loads enabled Claude and Codex credentials,
   provider quota state, and usage-store context.
-- `src/features/quotaForecast/forecast.ts` uses the provider's reported quota percentage and reset
-  window for forecast math. Usage tokens are context only and are never converted to quota percent.
+- `src/features/quotaForecast/forecast.ts` estimates from recorded changes in provider-reported quota
+  over the latest 24 hours of the current cycle. Usage tokens are context only and are never
+  converted to quota percent.
+- `src/services/api/quotaHistory.ts` reads `/usage-store/quota-history` through the v8 client. The
+  backend records genuine provider observations; opening the page never fabricates a timestamp.
+- Forecasts isolate provider, auth filename, credential index, and weekly window. Changed resets and
+  material percentage decreases start a new segment. At least three observations spanning 30
+  minutes and one percentage point of growth are required for an estimate.
+- Readings older than 30 minutes, truncated history, and unavailable history remain unknown. Fresh
+  provider-reported exhaustion is shown even when the new cycle or observation history is sparse.
+  Missing write diagnostics or process-lifetime lost records pause estimates. Imported log readings
+  are identified and retain low confidence because their precision is lower.
+- Confidence describes observation coverage and pace stability. It is not a calibrated probability.
+  Rows show sample count, span, age, and observed quota pace; a bounded UI clock updates freshness
+  without polling providers.
+- Token totals cover the local Monday week separately from provider cycles. Recent token pace uses
+  each account's first recorded request in the query range. Missing summaries remain unknown;
+  request and failure counts are usage context. Old connection or refresh responses cannot replace
+  current page state.
 - Claude uses the account-wide `seven-day` window. Codex uses its account-wide weekly window.
 - Missing, stale, sparse, invalid, or zero-consumption data must remain explicit unknown states.
 

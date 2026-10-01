@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -8,25 +8,29 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useRevealGroup } from '@/hooks/motion';
 import {
   UsageStoreDisabledError,
+  apiClient,
   authFilesApi,
+  quotaHistoryApi,
+  type QuotaHistoryResponse,
   usageStoreApi,
   type UsageSummaryResponse,
 } from '@/services/api';
 import { useAuthStore, useQuotaStore } from '@/stores';
 import { displayCredentialLabel } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
-import { browserTimeZone, parseInstantMs } from '@/features/usage/logic/timeRange';
+import { browserTimeZone } from '@/features/usage/logic/timeRange';
 import { formatUsageCount, formatUsageExact } from '@/features/usage/logic/formatUsage';
 import { useQuotaBatchLoader } from '@/features/quota/hooks/useQuotaBatchLoader';
 import { classifyQuotaFiles, type QuotaFileEntry } from '@/features/quota/logic';
 import { readQuotaShowEmails } from '@/features/quota/uiState';
 import {
   WEEK_MS,
+  FORECAST_RECENT_MS,
   buildQuotaForecast,
   buildForecastUsageMetrics,
-  firstUsageInstantMs,
   startOfLocalWeek,
   type ForecastProvider,
+  type ForecastHistoryState,
   type QuotaForecast,
 } from './forecast';
 import styles from './QuotaForecastPage.module.scss';
@@ -48,6 +52,7 @@ export function QuotaForecastPage() {
   const { t, i18n } = useTranslation();
   const revealRef = useRevealGroup<HTMLDivElement>();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const apiBase = useAuthStore((state) => state.apiBase);
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
   const codexQuota = useQuotaStore((state) => state.codexQuota);
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
@@ -55,7 +60,12 @@ export function QuotaForecastPage() {
   const [entries, setEntries] = useState<ForecastEntry[]>([]);
   const [currentWeek, setCurrentWeek] = useState<UsageSummaryResponse | null>(null);
   const [recent, setRecent] = useState<UsageSummaryResponse | null>(null);
-  const [observedRecentMs, setObservedRecentMs] = useState(0);
+  const [history, setHistory] = useState<QuotaHistoryResponse | null>(null);
+  const [historyState, setHistoryState] = useState<ForecastHistoryState>('loading');
+  const [historyError, setHistoryError] = useState('');
+  const [storeDiagnostics, setStoreDiagnostics] = useState<'healthy' | 'losses' | 'unavailable'>(
+    'unavailable'
+  );
   const [usageDisabled, setUsageDisabled] = useState(false);
   const [usageError, setUsageError] = useState('');
   const [error, setError] = useState('');
@@ -63,7 +73,16 @@ export function QuotaForecastPage() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const showEmails = readQuotaShowEmails();
 
+  const requestRef = useRef(0);
+
   const loadData = useCallback(async () => {
+    const requestId = ++requestRef.current;
+    const revision = apiClient.getConnectionRevision();
+    const current = () =>
+      requestRef.current === requestId &&
+      apiClient.getConnectionRevision() === revision &&
+      useAuthStore.getState().connectionStatus === 'connected';
+    if (connectionStatus !== 'connected') return;
     const now = Date.now();
     const recentFrom = now - WEEK_MS;
     const timeZone = browserTimeZone();
@@ -71,23 +90,36 @@ export function QuotaForecastPage() {
     setLoading(true);
     setError('');
     setUsageError('');
+    setHistoryError('');
+    setHistory(null);
+    setHistoryState('loading');
+    setStoreDiagnostics('unavailable');
+    setCurrentWeek(null);
+    setRecent(null);
 
     try {
       const files = await authFilesApi.list();
+      if (!current()) return;
       const forecastEntries = classifyQuotaFiles(files?.files ?? []).filter(isForecastEntry);
       setEntries(forecastEntries);
 
       const usageTask = (async () => {
         try {
           const meta = await usageStoreApi.getMeta();
+          if (!current()) return;
           if (!meta.enabled) {
             setUsageDisabled(true);
-            setCurrentWeek(null);
-            setRecent(null);
-            setObservedRecentMs(0);
             return;
           }
-
+          setStoreDiagnostics(
+            !meta.health
+              ? 'unavailable'
+              : meta.health.dropped_total > 0 ||
+                  meta.health.persistence_failed_rows > 0 ||
+                  meta.health.persistence_failed_batches > 0
+                ? 'losses'
+                : 'healthy'
+          );
           const [weekSummary, recentSummary] = await Promise.all([
             usageStoreApi.getSummary({
               from: startOfLocalWeek(now),
@@ -95,7 +127,7 @@ export function QuotaForecastPage() {
               tz: timeZone,
               groupBy: ['auth_id'],
               filters: { provider: ['claude', 'codex'] },
-              limit: 500,
+              limit: 5000,
             }),
             usageStoreApi.getSummary({
               from: recentFrom,
@@ -103,55 +135,92 @@ export function QuotaForecastPage() {
               tz: timeZone,
               groupBy: ['auth_id'],
               filters: { provider: ['claude', 'codex'] },
-              limit: 500,
+              limit: 5000,
             }),
           ]);
-          const oldestMs = firstUsageInstantMs(recentSummary) ?? parseInstantMs(meta.oldest);
+          if (!current()) return;
           setCurrentWeek(weekSummary);
           setRecent(recentSummary);
-          setObservedRecentMs(
-            oldestMs === null ? 0 : Math.max(0, now - Math.max(recentFrom, oldestMs))
-          );
           setUsageDisabled(false);
-        } catch (usageFailure: unknown) {
-          if (usageFailure instanceof UsageStoreDisabledError) {
-            setUsageDisabled(true);
-            setCurrentWeek(null);
-            setRecent(null);
-            setObservedRecentMs(0);
-            return;
+        } catch (failure: unknown) {
+          if (!current()) return;
+          setUsageDisabled(failure instanceof UsageStoreDisabledError);
+          if (!(failure instanceof UsageStoreDisabledError)) {
+            setUsageError(describeError(failure, t('quota_forecast.usage_failed')));
           }
-          setUsageDisabled(false);
-          setUsageError(describeError(usageFailure, t('quota_forecast.usage_failed')));
-          setCurrentWeek(null);
-          setRecent(null);
-          setObservedRecentMs(0);
         }
       })();
 
-      await Promise.all([usageTask, loadQuota(forecastEntries)]);
+      const historyTask = (async () => {
+        // A quota check records genuine observations. Read history after that check completes.
+        await loadQuota(forecastEntries);
+        if (!current()) return;
+        try {
+          const next = await quotaHistoryApi.getHistory({
+            from: new Date(Date.now() - FORECAST_RECENT_MS).toISOString(),
+            to: new Date(Date.now()).toISOString(),
+            limit: 10000,
+          });
+          if (!current()) return;
+          setHistory(next);
+          setHistoryState('ready');
+          setNowMs(Date.now());
+        } catch (failure: unknown) {
+          if (!current()) return;
+          setHistoryState(failure instanceof UsageStoreDisabledError ? 'disabled' : 'error');
+          if (!(failure instanceof UsageStoreDisabledError)) {
+            setHistoryError(describeError(failure, t('quota_forecast.history_failed')));
+          }
+        }
+      })();
+      await Promise.all([usageTask, historyTask]);
     } catch (failure: unknown) {
+      if (!current()) return;
       setError(describeError(failure, t('quota_forecast.load_failed')));
       setEntries([]);
+      setHistoryState('error');
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [loadQuota, t]);
+  }, [connectionStatus, loadQuota, t]);
 
   useHeaderRefresh(loadData);
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (connectionStatus === 'connected') void loadData();
+    else {
+      setEntries([]);
+      setHistory(null);
+      setCurrentWeek(null);
+      setRecent(null);
+      setHistoryState('loading');
+      setLoading(false);
+    }
+    return () => {
+      requestRef.current += 1;
+    };
+  }, [loadData, connectionStatus, apiBase]);
+
+  useEffect(() => {
+    // Re-evaluate freshness without making provider requests.
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    const updateClock = () => {
+      if (!document.hidden) setNowMs(Date.now());
+    };
+    document.addEventListener('visibilitychange', updateClock);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateClock);
+    };
+  }, []);
 
   const metrics = useMemo(
     () =>
       buildForecastUsageMetrics(
         entries.map((entry) => entry.file.name),
         currentWeek,
-        recent,
-        observedRecentMs
+        recent
       ),
-    [entries, currentWeek, recent, observedRecentMs]
+    [entries, currentWeek, recent]
   );
 
   const rows = useMemo(
@@ -162,17 +231,26 @@ export function QuotaForecastPage() {
         return {
           entry,
           quota,
-          forecast: buildQuotaForecast(entry.type, quota, nowMs),
+          forecast: buildQuotaForecast(entry.type, quota, nowMs, {
+            authId: entry.file.name,
+            authIndex: entry.file.authIndex,
+            history,
+            state: historyState,
+            diagnostics: storeDiagnostics,
+          }),
           usage: metrics.get(entry.file.name),
         };
       }),
-    [entries, claudeQuota, codexQuota, metrics, nowMs]
+    [entries, claudeQuota, codexQuota, metrics, nowMs, history, historyState, storeDiagnostics]
   );
 
   const totals = useMemo(
     () => ({
       currentWeekTokens: rows.reduce((sum, row) => sum + (row.usage?.currentWeekTokens ?? 0), 0),
-      dailyTokens: rows.reduce((sum, row) => sum + (row.usage?.dailyTokens ?? 0), 0),
+      dailyTokens:
+        rows.length > 0 && rows.every((row) => row.usage?.dailyTokens != null)
+          ? rows.reduce((sum, row) => sum + (row.usage?.dailyTokens ?? 0), 0)
+          : null,
       atRisk: rows.filter((row) => row.forecast.outcome === 'before-reset').length,
       unknown: rows.filter((row) => row.forecast.outcome === 'unknown').length,
     }),
@@ -205,7 +283,6 @@ export function QuotaForecastPage() {
   };
 
   const busy = loading || batchLoading;
-  const observedDays = observedRecentMs / DAY_MS;
 
   return (
     <div className={styles.page} ref={revealRef}>
@@ -230,13 +307,13 @@ export function QuotaForecastPage() {
       </header>
 
       <div className={styles.confidenceNote} role="note" data-reveal>
-        <span className={styles.lowBadge}>{t('quota_forecast.low_confidence')}</span>
+        <span className={styles.lowBadge}>{t('quota_forecast.estimated')}</span>
         <span>{t('quota_forecast.method_note')}</span>
       </div>
 
-      {(error || usageError) && (
+      {(error || usageError || historyError) && (
         <div className={styles.errorBanner} role="alert">
-          {error || usageError}
+          {error || usageError || historyError}
         </div>
       )}
 
@@ -255,14 +332,16 @@ export function QuotaForecastPage() {
           <section className={styles.summary} aria-label={t('quota_forecast.summary_label')}>
             <article className={styles.stat}>
               <span>{t('quota_forecast.this_week')}</span>
-              <strong title={formatUsageExact(totals.currentWeekTokens)}>
-                {formatUsageCount(totals.currentWeekTokens)}
+              <strong title={currentWeek ? formatUsageExact(totals.currentWeekTokens) : undefined}>
+                {currentWeek ? formatUsageCount(totals.currentWeekTokens) : '--'}
               </strong>
               <small>{t('quota_forecast.tokens')}</small>
             </article>
             <article className={styles.stat}>
               <span>{t('quota_forecast.daily_pace')}</span>
-              <strong>{observedRecentMs > 0 ? formatUsageCount(totals.dailyTokens) : '--'}</strong>
+              <strong>
+                {totals.dailyTokens === null ? '--' : formatUsageCount(totals.dailyTokens)}
+              </strong>
               <small>{t('quota_forecast.tokens_per_day')}</small>
             </article>
             <article className={styles.stat}>
@@ -280,13 +359,10 @@ export function QuotaForecastPage() {
           <div className={styles.historyNote}>
             {usageDisabled
               ? t('quota_forecast.usage_disabled')
-              : observedRecentMs > 0
-                ? t('quota_forecast.history_available', {
-                    days: observedDays.toLocaleString(i18n.resolvedLanguage, {
-                      maximumFractionDigits: 1,
-                    }),
-                  })
-                : t('quota_forecast.history_unknown')}
+              : recent
+                ? t('quota_forecast.history_available')
+                : t('quota_forecast.history_unknown')}{' '}
+            {t('quota_forecast.local_week_note')}
           </div>
 
           <div className={styles.tableWrap}>
@@ -328,7 +404,9 @@ export function QuotaForecastPage() {
                     </td>
                     <td>
                       <span className={styles.metricValue}>
-                        {usage ? formatUsageCount(usage.currentWeekTokens) : '--'}
+                        {usage?.currentWeekTokens == null
+                          ? '--'
+                          : formatUsageCount(usage.currentWeekTokens)}
                       </span>
                       <span className={styles.metricUnit}>{t('quota_forecast.tokens')}</span>
                     </td>
@@ -340,7 +418,23 @@ export function QuotaForecastPage() {
                       </span>
                       <span className={styles.metricUnit}>
                         {t('quota_forecast.tokens_per_day')}
+                        {usage?.observedRecentMs != null && usage.observedRecentMs >= 30 * 60_000
+                          ? ` · ${t('quota_forecast.usage_span', {
+                              days: (usage.observedRecentMs / DAY_MS).toLocaleString(
+                                i18n.resolvedLanguage,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}`
+                          : ''}
                       </span>
+                      {usage?.recentRequests != null && (
+                        <span className={styles.metricUnit}>
+                          {t('quota_forecast.request_context', {
+                            requests: formatUsageCount(usage.recentRequests),
+                            failed: formatUsageCount(usage.recentFailed ?? 0),
+                          })}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className={styles.forecastText}>{forecastText(forecast)}</span>
@@ -356,9 +450,45 @@ export function QuotaForecastPage() {
                         {forecast.confidence === 'reported'
                           ? t('quota_forecast.reported')
                           : forecast.confidence === 'estimated'
-                            ? t('quota_forecast.low_confidence')
+                            ? t(
+                                forecast.quality === 'moderate'
+                                  ? 'quota_forecast.moderate_confidence'
+                                  : 'quota_forecast.low_confidence'
+                              )
                             : t('quota_forecast.unknown')}
                       </span>
+                      {forecast.observedAtMs !== null && (
+                        <span className={styles.metricUnit}>
+                          {t('quota_forecast.observation_context', {
+                            count: forecast.sampleCount,
+                            hours: (forecast.sampleSpanMs / 3_600_000).toLocaleString(
+                              i18n.resolvedLanguage,
+                              { maximumFractionDigits: 1 }
+                            ),
+                            minutes: Math.floor((forecast.ageMs ?? 0) / 60_000),
+                          })}
+                        </span>
+                      )}
+                      {forecast.ratePercentPerDay !== null && (
+                        <span className={styles.metricUnit}>
+                          {t('quota_forecast.quota_pace', {
+                            percent: forecast.ratePercentPerDay.toLocaleString(
+                              i18n.resolvedLanguage,
+                              { maximumFractionDigits: 1 }
+                            ),
+                          })}
+                        </span>
+                      )}
+                      {forecast.resetDetected && (
+                        <span className={styles.metricUnit}>
+                          {t('quota_forecast.reset_excluded')}
+                        </span>
+                      )}
+                      {forecast.includesImportedReadings && (
+                        <span className={styles.metricUnit}>
+                          {t('quota_forecast.imported_readings')}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className={styles.metricValue}>

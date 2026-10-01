@@ -16,3 +16,4 @@ export * from './plugins';
 export * from './transformers';
 export * from './vertex';
 export * from './usageStore';
+export * from './quotaHistory';

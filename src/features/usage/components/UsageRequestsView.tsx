@@ -19,6 +19,7 @@ import { csvBlob, serializeCsv, usageCsvFilename, type CsvValue } from '../logic
 import { formatUsageCount, formatUsageDuration, formatUsageInstant } from '../logic/formatUsage';
 import { resolveAccountName, resolveDeviceName, resolveModelName } from '../logic/naming';
 import type { AccountIndex, DeviceIndex } from '../logic/naming';
+import { requestStatusKey } from '../logic/requestStatus';
 import styles from './UsageViews.module.scss';
 
 export interface UsageRequestsViewProps {
@@ -204,11 +205,8 @@ export function UsageRequestsView({
                   </td>
                   <td className={row.failed ? styles.statusFail : styles.statusOk}>
                     <span className={styles.codeCell}>
-                      {row.failed
-                        ? row.status_code
-                          ? String(row.status_code)
-                          : t('usage.status_failed')
-                        : t('usage.status_ok')}
+                      {t(requestStatusKey(row))}
+                      {row.status_code > 0 ? ` (${row.status_code})` : ''}
                     </span>
                   </td>
                   <td>{formatUsageDuration(row.latency_ms)}</td>

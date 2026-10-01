@@ -189,6 +189,17 @@ export interface UsageRequestsResponse {
 /** Distinct values seen in the last 90 days, per dimension. */
 export type UsageDimensions = Partial<Record<UsageListFilter, string[]>>;
 
+export interface UsageStoreHealth {
+  dropped_total: number;
+  persistence_failed_batches: number;
+  persistence_failed_rows: number;
+  queue_depth: number;
+  queue_capacity: number;
+  last_flush_at_ms: number;
+  last_successful_flush_at_ms: number;
+  last_persistence_failure_at_ms: number;
+}
+
 export interface UsageMetaResponse {
   enabled: boolean;
   path: string;
@@ -198,6 +209,8 @@ export interface UsageMetaResponse {
   newest: string | null;
   size_bytes: number;
   dimensions: UsageDimensions;
+  /** Process-lifetime write diagnostics; absent on older backends. */
+  health?: UsageStoreHealth;
 }
 
 /**
@@ -440,6 +453,26 @@ const normalizeDimensions = (raw: unknown): UsageDimensions => {
   }, {});
 };
 
+const normalizeStoreHealth = (raw: unknown): UsageStoreHealth | undefined => {
+  if (!isRecord(raw)) return undefined;
+  const fields = [
+    'dropped_total',
+    'persistence_failed_batches',
+    'persistence_failed_rows',
+    'queue_depth',
+    'queue_capacity',
+    'last_flush_at_ms',
+    'last_successful_flush_at_ms',
+    'last_persistence_failure_at_ms',
+  ] as const;
+  if (
+    fields.some((key) => typeof raw[key] !== 'number' || !Number.isFinite(raw[key]) || raw[key] < 0)
+  ) {
+    return undefined;
+  }
+  return Object.fromEntries(fields.map((key) => [key, raw[key]])) as unknown as UsageStoreHealth;
+};
+
 const normalizeMetaResponse = (raw: unknown): UsageMetaResponse => {
   const record = isRecord(raw) ? raw : {};
   return {
@@ -451,6 +484,7 @@ const normalizeMetaResponse = (raw: unknown): UsageMetaResponse => {
     newest: toText(record.newest) || null,
     size_bytes: toNumber(record.size_bytes),
     dimensions: normalizeDimensions(record.dimensions),
+    health: normalizeStoreHealth(record.health),
   };
 };
 

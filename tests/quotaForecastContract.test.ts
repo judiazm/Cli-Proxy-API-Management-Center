@@ -22,8 +22,20 @@ describe('quota forecast page contract', () => {
     expect(page).toContain(
       "entry.type === 'claude' ? claudeQuota[cacheKey] : codexQuota[cacheKey]"
     );
-    expect(forecast).toContain("provider's own weekly percentage and elapsed cycle time");
+    expect(forecast).toContain("provider's own weekly percentage, observed over time");
     expect(forecast).not.toMatch(/total_tokens\s*\/\s*used/i);
+  });
+
+  test('reads recorded quota history after quota checks and guards old connections and requests', () => {
+    const page = read('src/features/quotaForecast/QuotaForecastPage.tsx');
+    expect(page).toContain('quotaHistoryApi.getHistory');
+    expect(page.indexOf('await loadQuota(forecastEntries)')).toBeLessThan(
+      page.indexOf('quotaHistoryApi.getHistory')
+    );
+    expect(page).toContain('apiClient.getConnectionRevision() === revision');
+    expect(page).toContain('requestRef.current === requestId');
+    expect(page).toContain('window.setInterval(() => setNowMs(Date.now()), 60_000)');
+    expect(page).toContain('window.clearInterval(timer)');
   });
 
   test('ships the same forecast keys in every locale', () => {
@@ -35,6 +47,13 @@ describe('quota forecast page contract', () => {
       expect(locale.nav.quota_forecast).toBeTruthy();
       expect(locale.nav_meta.quota_forecast).toBeTruthy();
       expect(Object.keys(locale.quota_forecast).sort()).toEqual(englishKeys);
+      for (const key of englishKeys) {
+        const placeholders = (value: string): string[] =>
+          (value.match(/\{\{\s*\w+\s*\}\}/g) ?? []).map((part) => part.replace(/\s/g, '')).sort();
+        expect(placeholders(locale.quota_forecast[key])).toEqual(
+          placeholders(locales[0].quota_forecast[key])
+        );
+      }
     }
   });
 });
