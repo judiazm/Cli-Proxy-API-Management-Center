@@ -6,11 +6,19 @@ import {
   buildCodexQuotaForecast,
   buildForecastUsageMetrics,
   firstUsageInstantMs,
+  isQuotaAtRisk,
   startOfLocalWeek,
   type ForecastHistoryContext,
 } from '@/features/quotaForecast/forecast';
 import type { ClaudeQuotaState, CodexQuotaState } from '@/types';
 import type { QuotaObservation, UsageMetrics, UsageSummaryResponse } from '@/services/api';
+
+test('risk summary includes exhausted accounts and does not treat unknown accounts as safe', () => {
+  expect(isQuotaAtRisk({ outcome: 'exhausted' })).toBe(true);
+  expect(isQuotaAtRisk({ outcome: 'before-reset' })).toBe(true);
+  expect(isQuotaAtRisk({ outcome: 'lasts-to-reset' })).toBe(false);
+  expect(isQuotaAtRisk({ outcome: 'unknown' })).toBe(false);
+});
 
 const HOUR_MS = 60 * 60_000;
 const NOW = Date.UTC(2026, 8, 14, 16);

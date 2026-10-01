@@ -144,3 +144,5 @@ Before publishing any fork panel release:
 `tests/forkFeatures.test.ts` is the minimum fork-presence contract. Do not remove or bypass it in an
 updater branch. If a feature is intentionally replaced, update this manifest and the contract in the
 same reviewed change.
+
+The forecast risk total includes both exhausted accounts and accounts projected to run out before reset. Unknown forecasts are disclosed separately and are not evidence of available capacity.

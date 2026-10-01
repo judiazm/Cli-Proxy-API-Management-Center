@@ -129,6 +129,10 @@ export const firstUsageInstantMs = (summary: UsageSummaryResponse | null): numbe
   return Number.isFinite(firstMs) ? firstMs : null;
 };
 
+/** Accounts already exhausted remain at risk until their reported reset. */
+export const isQuotaAtRisk = (forecast: Pick<QuotaForecast, 'outcome'>): boolean =>
+  forecast.outcome === 'exhausted' || forecast.outcome === 'before-reset';
+
 export const buildCodexQuotaForecast = (
   quota: CodexQuotaState | undefined,
   nowMs: number,

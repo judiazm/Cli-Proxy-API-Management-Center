@@ -28,6 +28,7 @@ import {
   FORECAST_RECENT_MS,
   buildQuotaForecast,
   buildForecastUsageMetrics,
+  isQuotaAtRisk,
   startOfLocalWeek,
   type ForecastProvider,
   type ForecastHistoryState,
@@ -251,7 +252,7 @@ export function QuotaForecastPage() {
         rows.length > 0 && rows.every((row) => row.usage?.dailyTokens != null)
           ? rows.reduce((sum, row) => sum + (row.usage?.dailyTokens ?? 0), 0)
           : null,
-      atRisk: rows.filter((row) => row.forecast.outcome === 'before-reset').length,
+      atRisk: rows.filter((row) => isQuotaAtRisk(row.forecast)).length,
       unknown: rows.filter((row) => row.forecast.outcome === 'unknown').length,
     }),
     [rows]
