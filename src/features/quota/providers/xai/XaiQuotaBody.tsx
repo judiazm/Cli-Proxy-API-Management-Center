@@ -48,6 +48,15 @@ const formatXaiPercent = (value: number | null): string => {
   return `${Math.round(value)}%`;
 };
 
+const planValueClass = (
+  tier: XaiBillingSummary['planTier'],
+  classes: QuotaBodyProps<XaiQuotaState>['classes']
+) => {
+  if (tier === 'elite') return classes.elitePlanValue;
+  if (tier === 'premium') return classes.premiumPlanValue;
+  return classes.codexPlanValue;
+};
+
 export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) {
   const { t, i18n } = useTranslation();
   // Ahead of the early return below — hooks cannot be conditional.
@@ -70,7 +79,15 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
       <>
         <div className={classes.codexPlan}>
           <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
-          <span className={classes.premiumPlanValue}>{t('xai_quota.plan_paid')}</span>
+          <span
+            className={
+              billing.planLabel
+                ? planValueClass(billing.planTier, classes)
+                : classes.premiumPlanValue
+            }
+          >
+            {billing.planLabel ?? t('xai_quota.plan_paid')}
+          </span>
         </div>
         <div className={classes.quotaMessage}>{t('xai_quota.paid_health')}</div>
       </>
@@ -101,7 +118,7 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
     clampedOnDemandUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedOnDemandUsed));
   const onDemandPercentLabel = formatXaiPercent(onDemandRemaining);
   const onDemandAmountLabel = formatXaiOnDemandAmount(billing);
-  // Shared with the compact quota list so both read the allowance the same way.
+  // Share the plan mapping with the compact quota row.
   const plan = xaiPlanBadge(billing.monthlyLimitCents);
   const weeklyUsed =
     billing.periodType === 'weekly' && billing.usagePercent !== null
@@ -124,15 +141,45 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
       Boolean(billing.billingPeriodEnd)) &&
     !(hasWeeklyData && billing.monthlyLimitCents === 0 && billing.usedCents === 0);
 
+  const subscriptionLabel = billing.planLabel ?? (plan?.labelKey ? t(plan.labelKey) : null);
+  const subscriptionClass = billing.planLabel
+    ? planValueClass(billing.planTier, classes)
+    : plan?.tier === 'premium'
+      ? classes.premiumPlanValue
+      : classes.codexPlanValue;
+  const headerReset = buildResetDisplay(
+    null,
+    hasWeeklyData ? billing.resetAtMs : parseIsoToMs(billing.billingPeriodEnd),
+    now,
+    locale
+  );
+
   return (
     <>
-      {plan?.labelKey && (
+      {(subscriptionLabel || headerReset) && (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
-          <span
-            className={plan.tier === 'premium' ? classes.premiumPlanValue : classes.codexPlanValue}
-          >
-            {t(plan.labelKey)}
+          {subscriptionLabel && (
+            <span className={classes.codexPlanItem}>
+              <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
+              <span className={subscriptionClass}>{subscriptionLabel}</span>
+            </span>
+          )}
+          {headerReset && (
+            <span className={classes.codexPlanItem}>
+              <span className={classes.codexPlanLabel}>{t('xai_quota.resets_label')}</span>
+              <span className={classes.codexPlanValue}>{headerReset.absolute}</span>
+              {headerReset.relative && (
+                <span className={classes.quotaResetRelative}>{headerReset.relative}</span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {typeof billing.prepaidBalanceCents === 'number' && billing.prepaidBalanceCents > 0 && (
+        <div className={classes.codexPlan}>
+          <span className={classes.codexPlanLabel}>{t('xai_quota.prepaid')}</span>
+          <span className={classes.quotaAmount}>
+            {formatUsdFromCents(billing.prepaidBalanceCents)}
           </span>
         </div>
       )}
