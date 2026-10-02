@@ -37,6 +37,7 @@ import {
   isThemeSurfaceIconProvider,
 } from '@/features/authFiles/constants';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '../providers';
+import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
 import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { bindClassMap } from '../types';
 import { QUOTA_BAR_CLASS_KEYS, QuotaBar } from './QuotaBar';
@@ -117,6 +118,14 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
   const iconSrc = getAuthFileIcon(entry.type, resolvedTheme);
   const typeLabel = getTypeLabel(t, entry.type);
   const displayName = displayCredentialLabel(getQuotaDisplayName(file), file.note, showEmails);
+  const claudeReset = useClaudeResetGrants(
+    file,
+    entry.type === 'claude' && status !== 'idle',
+    !canRefresh || loading || resetting,
+    quota,
+    onRefresh,
+    displayName
+  );
   const errorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,
@@ -314,8 +323,17 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
           <span className={styles.name} title={displayName}>
             {displayName}
           </span>
-          {(model?.plan || model?.renewal || (model?.notes.length ?? 0) > 0) && (
+          {(model?.plan ||
+            model?.renewal ||
+            (model?.notes.length ?? 0) > 0 ||
+            (entry.type === 'claude' && status === 'success')) && (
             <div className={styles.sub}>
+              {entry.type === 'claude' && status === 'success' && (
+                <span className={styles.note}>
+                  <span className={styles.noteLabel}>{t('claude_reset.remaining')}</span>
+                  <span className={styles.noteValue}>{claudeReset.count ?? '--'}</span>
+                </span>
+              )}
               {model?.plan && (
                 <span className={planBadgeClass(model.plan.tier)}>
                   {model.plan.labelKey ? t(model.plan.labelKey) : model.plan.text}
@@ -344,12 +362,29 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
               ))}
             </div>
           )}
+          {entry.type === 'claude' && status === 'success' && claudeReset.message && (
+            <span role="status" className={styles.resetMessage}>
+              {t(`claude_reset.${claudeReset.message}`)}
+            </span>
+          )}
         </div>
       </div>
 
       {renderState()}
 
       <div className={styles.actions}>
+        {entry.type === 'claude' && status !== 'idle' && (
+          <button
+            type="button"
+            className={styles.actionPill}
+            disabled={claudeReset.blocked}
+            onClick={claudeReset.confirm}
+            title={t(`claude_reset.${claudeReset.buttonLabel}`)}
+          >
+            <IconRefreshCw size={12} className={claudeReset.busy ? styles.spinning : undefined} />
+            {t(`claude_reset.${claudeReset.buttonLabel}`)}
+          </button>
+        )}
         {showReset && (
           <button
             type="button"
@@ -366,7 +401,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
           type="button"
           className={styles.actionPill}
           onClick={onRefresh}
-          disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting)}
+          disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting || claudeReset.busy)}
           title={t('auth_files.quota_refresh_hint')}
         >
           <IconRefreshCw size={12} className={loading ? styles.spinning : undefined} />
