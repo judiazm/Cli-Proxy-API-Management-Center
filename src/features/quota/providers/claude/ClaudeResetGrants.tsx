@@ -5,13 +5,14 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useNotificationStore } from '@/stores';
 import { apiClient } from '@/services/api/client';
 import {
+  AnthropicResetGrantError,
   readClaudeResetGrants,
   type AnthropicResetGrantStatus,
 } from '@/services/api/claudeResetGrants';
 import type { AuthFileItem } from '@/types';
 import { normalizeAuthIndex } from '@/utils/quota';
 import { resetGrantOperations, RETRY_WINDOW_MS } from './resetGrantOperations';
-import { selectResetGrant } from './selectResetGrant';
+import { describeResetGrantState, selectResetGrant } from './selectResetGrant';
 
 /** Row-owned reads; the session-scoped journal owns spending and ambiguous retries. */
 export function useClaudeResetGrants(
@@ -52,8 +53,11 @@ export function useClaudeResetGrants(
           setMessage('');
         }
       },
-      () => {
-        if (current()) setMessage('read_error');
+      (error: unknown) => {
+        if (!current()) return;
+        const throttled =
+          error instanceof AnthropicResetGrantError && error.code === 'rate_limited';
+        setMessage(throttled ? 'read_throttled' : 'read_error');
       }
     );
     return () => {
@@ -116,7 +120,11 @@ export function useClaudeResetGrants(
     busy,
     blocked,
     confirm,
-    message: pending ? (expired ? 'expired' : 'unknown') : message,
+    message: pending
+      ? expired
+        ? 'expired'
+        : 'unknown'
+      : message || (status ? (describeResetGrantState(status, now) ?? '') : ''),
     buttonLabel: pending ? 'retry' : 'use',
   };
 }

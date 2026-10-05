@@ -124,6 +124,14 @@ state is encoded in the URL so back/forward navigation and shared links remain c
 key is expanded from its fingerprint only when preparing the backend request. The full key must not
 enter the address bar, filter chips, headings, or exported labels.
 
+## Reset outcomes
+
+A Codex reset is reported as done only when the consume answer's `code` is `reset` or
+`already_redeemed`. ChatGPT answers `nothing_to_reset` and `no_credit` with HTTP 200 and spends
+nothing; those, and any unrecognized answer, are shown as not reset instead of a success toast.
+Claude reset grants explain why no grant can be spent (throttled read, spent, ineligible, waiting
+for the limit) on the quota row, including when the row's own usage read failed.
+
 ## Release gate
 
 Before publishing any fork panel release:

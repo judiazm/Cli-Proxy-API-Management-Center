@@ -17,10 +17,24 @@ describe('fork feature manifest', () => {
       '## Pools',
       '## Object-form API keys',
       '## Persistent Usage',
+      '## Reset outcomes',
       '## Release gate',
     ]) {
       expect(manifest).toContain(required);
     }
+  });
+});
+
+describe('reset outcome contract', () => {
+  test('keeps unspent Codex answers and Claude grant states out of the success path', () => {
+    const codex = read('src/features/quota/providers/codex/data.ts');
+    expect(codex).toContain("outcome === 'reset' || outcome === 'already_redeemed'");
+    expect(codex).toContain("codex_quota.reset_outcome_${outcome ?? 'unknown'}");
+    const hook = read('src/features/quota/providers/claude/ClaudeResetGrants.tsx');
+    expect(hook).toContain('describeResetGrantState(status, now)');
+    expect(hook).toContain("'read_throttled'");
+    const row = read('src/features/quota/components/QuotaCredentialRow.tsx');
+    expect(row).toContain("entry.type === 'claude' && status !== 'idle' && claudeReset.message");
   });
 });
 

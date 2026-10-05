@@ -4,10 +4,12 @@ import {
   CODEX_CONFIG,
   buildCodexQuotaWindows,
   normalizeCodexAccountCredits,
+  parseCodexResetOutcome,
 } from '@/features/quota/providers/codex/data';
 import type { CodexQuotaState, CodexUsagePayload } from '@/types';
 import { apiCallApi, type ApiCallRequest, type ApiCallResult } from '@/services/api';
 import {
+  CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
   CODEX_RATE_LIMIT_RESET_CREDITS_URL,
   CODEX_SUBSCRIPTION_URL,
   CODEX_USAGE_URL,
@@ -224,5 +226,67 @@ describe('Codex live subscription renewal', () => {
     );
 
     expect(quota.subscriptionActiveUntil).toBe('2026-09-03T13:27:01Z');
+  });
+});
+
+describe('Codex reset consume outcomes', () => {
+  const file = { name: 'codex.json', type: 'codex', auth_index: 'codex:1' };
+  const mockConsume = (consumeBody: unknown) => {
+    const urls: string[] = [];
+    apiCallApi.request = async (payload) => {
+      urls.push(payload.url);
+      if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL) {
+        return result(200, consumeBody);
+      }
+      if (payload.url === CODEX_USAGE_URL) return result(200, CURRENT_CODEX_USAGE_PAYLOAD);
+      if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_URL) {
+        return result(200, { available_count: 1, credits: [] });
+      }
+      if (payload.url.startsWith(CODEX_SUBSCRIPTION_URL)) return result(200, {});
+      throw new Error(`Unexpected URL: ${payload.url}`);
+    };
+    return urls;
+  };
+
+  test('only reset and already_redeemed count as success and refresh the quota', async () => {
+    for (const code of ['reset', 'already_redeemed']) {
+      const urls = mockConsume({ code, windows_reset: 2 });
+      const data = await CODEX_CONFIG.resetQuota!(file, t);
+      expect(data.windows.length).toBeGreaterThan(0);
+      expect(urls).toContain(CODEX_USAGE_URL);
+    }
+  });
+
+  test('a 200 that did not spend a reset is reported, not shown as success', async () => {
+    for (const [body, key] of [
+      [
+        { code: 'nothing_to_reset', windows_reset: 0 },
+        'codex_quota.reset_outcome_nothing_to_reset',
+      ],
+      [{ code: 'no_credit' }, 'codex_quota.reset_outcome_no_credit'],
+      [{ status: 'ok' }, 'codex_quota.reset_outcome_unknown'],
+      [null, 'codex_quota.reset_outcome_unknown'],
+    ] as const) {
+      const urls = mockConsume(body);
+      await expect(CODEX_CONFIG.resetQuota!(file, t)).rejects.toThrow(key);
+      expect(urls).toEqual([CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL]);
+    }
+  });
+
+  test('parses string and object bodies and rejects unknown codes', () => {
+    expect(parseCodexResetOutcome('{"code":"reset","windows_reset":2}')).toBe('reset');
+    expect(parseCodexResetOutcome({ code: 'nothing_to_reset' })).toBe('nothing_to_reset');
+    expect(parseCodexResetOutcome({ code: 'RESET' })).toBeNull();
+    expect(parseCodexResetOutcome('not json')).toBeNull();
+    expect(parseCodexResetOutcome([])).toBeNull();
+  });
+
+  test('every outcome message exists in all four locales', async () => {
+    for (const locale of ['en', 'zh-CN', 'zh-TW', 'ru']) {
+      const codex = (await Bun.file(`src/i18n/locales/${locale}.json`).json()).codex_quota;
+      for (const key of ['nothing_to_reset', 'no_credit', 'unknown']) {
+        expect(typeof codex[`reset_outcome_${key}`]).toBe('string');
+      }
+    }
   });
 });

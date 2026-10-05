@@ -1,4 +1,7 @@
-import { selectResetGrant } from '../src/features/quota/providers/claude/selectResetGrant';
+import {
+  describeResetGrantState,
+  selectResetGrant,
+} from '../src/features/quota/providers/claude/selectResetGrant';
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
@@ -7,6 +10,7 @@ import {
   parseAnthropicResetGrantStatus,
   readClaudeOrganization,
   readClaudeResetGrants,
+  AnthropicResetGrantError,
   AnthropicResetGrantUnknownOutcome,
   ANTHROPIC_RESET_RESULTS,
   type AnthropicResetSettledCode,
@@ -357,4 +361,42 @@ test('Claude reset grants are wired into the fork row with masked confirmation n
   expect(hook).toContain("pending ? 'claude_reset.retry_confirm'");
   expect(hook).not.toContain('<Modal');
   expect(hook).not.toContain('status.grants.map');
+});
+
+test('the row explains why no grant can be spent', () => {
+  const base = status();
+  const g = base.grants[0];
+  expect(describeResetGrantState(base, 0)).toBeNull();
+  expect(describeResetGrantState({ ...base, eligible: false, grants: [] }, 0)).toBe(
+    'state_ineligible'
+  );
+  expect(describeResetGrantState({ ...base, grants: [] }, 0)).toBe('empty');
+  expect(describeResetGrantState({ ...base, grants: [{ ...g, resetsLeft: 0 }] }, 0)).toBe(
+    'state_spent'
+  );
+  expect(
+    describeResetGrantState(
+      { ...base, atLimit: false, grants: [{ ...g, useRequiresLimit: true }] },
+      0
+    )
+  ).toBe('state_waiting_limit');
+  expect(describeResetGrantState({ ...base, grants: [{ ...g, usableNow: false }] }, 0)).toBe(
+    'unavailable'
+  );
+  expect(describeResetGrantState({ ...base, cooldownUntil: new Date(1000).toISOString() }, 0)).toBe(
+    'cooldown'
+  );
+  expect(
+    describeResetGrantState({ ...base, grants: [{ ...g, endsAt: new Date(0).toISOString() }] }, 1)
+  ).toBe('empty');
+});
+
+test('a 429 status read is reported as throttled, not as a generic read error', async () => {
+  apiCallApi.request = async () => ({ statusCode: 429, header: {}, bodyText: '', body: null });
+  const error = await readClaudeResetGrants('a').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(AnthropicResetGrantError);
+  expect((error as AnthropicResetGrantError).code).toBe('rate_limited');
+  apiCallApi.request = async () => ({ statusCode: 500, header: {}, bodyText: '', body: null });
+  const other = await readClaudeResetGrants('a').catch((caught: unknown) => caught);
+  expect((other as AnthropicResetGrantError).code).toBe('upstream');
 });

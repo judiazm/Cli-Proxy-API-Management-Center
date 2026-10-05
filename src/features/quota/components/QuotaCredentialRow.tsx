@@ -362,7 +362,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
               ))}
             </div>
           )}
-          {entry.type === 'claude' && status === 'success' && claudeReset.message && (
+          {entry.type === 'claude' && status !== 'idle' && claudeReset.message && (
             <span role="status" className={styles.resetMessage}>
               {t(`claude_reset.${claudeReset.message}`)}
             </span>

@@ -487,10 +487,36 @@ const createCodexRedeemRequestId = (): string => {
   });
 };
 
+/** Terminal answers of the consume endpoint (codex-rs ConsumeRateLimitResetCreditCode). */
+export const CODEX_RESET_OUTCOMES = [
+  'reset',
+  'nothing_to_reset',
+  'no_credit',
+  'already_redeemed',
+] as const;
+export type CodexResetOutcome = (typeof CODEX_RESET_OUTCOMES)[number];
+
+/** A 2xx consume answer is only a reset when its `code` says so. */
+export const parseCodexResetOutcome = (body: unknown): CodexResetOutcome | null => {
+  let parsed = body;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const code = (parsed as Record<string, unknown>).code;
+  return typeof code === 'string' && (CODEX_RESET_OUTCOMES as readonly string[]).includes(code)
+    ? (code as CodexResetOutcome)
+    : null;
+};
+
 const consumeCodexRateLimitResetCredit = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<void> => {
+): Promise<CodexResetOutcome | null> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -512,11 +538,16 @@ const consumeCodexRateLimitResetCredit = async (
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
   }
+  return parseCodexResetOutcome(result.body ?? result.bodyText);
 };
 
 const resetCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> => {
-  await consumeCodexRateLimitResetCredit(file, t);
-  return fetchCodexQuota(file, t);
+  const outcome = await consumeCodexRateLimitResetCredit(file, t);
+  if (outcome === 'reset' || outcome === 'already_redeemed') {
+    return fetchCodexQuota(file, t);
+  }
+  // nothing_to_reset and no_credit leave the credit unspent; anything else is unconfirmed.
+  throw new Error(t(`codex_quota.reset_outcome_${outcome ?? 'unknown'}`));
 };
 
 export const CODEX_CONFIG: QuotaProviderData<CodexQuotaState, CodexQuotaData> = {

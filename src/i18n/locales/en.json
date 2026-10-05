@@ -548,7 +548,10 @@
     "plan_free": "Free",
     "plan_pro": "Pro 200",
     "plan_prolite": "Pro 100",
-    "plan_business_premium": "Business Premium"
+    "plan_business_premium": "Business Premium",
+    "reset_outcome_nothing_to_reset": "Nothing to reset right now. No reset was used.",
+    "reset_outcome_no_credit": "No reset credit is available. Nothing was used.",
+    "reset_outcome_unknown": "The reset outcome was not confirmed. Refresh to check whether a reset was used."
   },
   "devin_quota": {
     "daily": "Daily remaining",
@@ -2374,6 +2377,10 @@
     "ineligible": "This account is not eligible.",
     "unavailable": "Resets are currently unavailable.",
     "rate_limited": "Request rate limited.",
-    "auth_error": "Authorization was refused."
+    "auth_error": "Authorization was refused.",
+    "read_throttled": "Anthropic is rate limiting usage reads for this account. Nothing was submitted; try again later.",
+    "state_ineligible": "This account is not offered banked resets.",
+    "state_spent": "All banked resets have been used.",
+    "state_waiting_limit": "The banked reset becomes usable once this account reaches its limit."
   }
 }

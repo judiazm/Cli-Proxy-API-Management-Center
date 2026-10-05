@@ -546,7 +546,10 @@
     "plan_free": "Free",
     "plan_pro": "Pro 200",
     "plan_prolite": "Pro 100",
-    "plan_business_premium": "Business Premium"
+    "plan_business_premium": "Business Premium",
+    "reset_outcome_nothing_to_reset": "当前无需重置，未使用重置次数。",
+    "reset_outcome_no_credit": "没有可用的重置次数，未使用任何次数。",
+    "reset_outcome_unknown": "重置结果未确认。请刷新以确认是否已使用重置次数。"
   },
   "devin_quota": {
     "daily": "每日剩余额度",
@@ -2372,6 +2375,10 @@
     "ineligible": "此账户不符合资格。",
     "unavailable": "重置暂不可用。",
     "rate_limited": "请求过于频繁。",
-    "auth_error": "授权被拒绝。"
+    "auth_error": "授权被拒绝。",
+    "read_throttled": "Anthropic 正在限制此账号的用量读取。未提交任何操作，请稍后重试。",
+    "state_ineligible": "此账号不提供可用的重置次数。",
+    "state_spent": "所有重置次数均已用完。",
+    "state_waiting_limit": "此账号达到额度上限后即可使用重置次数。"
   }
 }
