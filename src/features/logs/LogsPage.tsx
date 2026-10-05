@@ -47,6 +47,7 @@ import { shouldExitLogFullscreen } from './model/logFullscreen';
 import { useLogFilters } from './hooks/useLogFilters';
 import { LogRequestsView } from './components/LogRequestsView';
 import { formatLogInstant, parseServerLogTimestamp } from '@/utils/time/displayZone';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import { isNearBottom, useLogScroller } from './hooks/useLogScroller';
 import styles from './LogsPage.module.scss';
 
@@ -487,7 +488,12 @@ export function LogsPage() {
                 {lastUpdated && (
                   <>
                     {' '}
-                    · {t('logs.last_updated', { time: new Date(lastUpdated).toLocaleTimeString() })}
+                    ·{' '}
+                    {t('logs.last_updated', {
+                      time: `${new Date(lastUpdated).toLocaleTimeString()} ${resolveTimeZoneLabel(
+                        new Date(lastUpdated)
+                      )}`,
+                    })}
                   </>
                 )}
               </div>

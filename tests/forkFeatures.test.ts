@@ -177,6 +177,7 @@ describe('2026-10-05 dashboard pass contract', () => {
     expect(read('src/features/logs/LogsPage.tsx')).toContain(
       'formatServerLogTimestamp(line.timestamp)'
     );
+    expect(read('src/features/authFiles/constants.ts')).toContain('resolveTimeZoneLabel(date)');
   });
 
   test('plans, weekly-only Codex rows and reset applicability stay wired', () => {

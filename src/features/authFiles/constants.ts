@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconCodex from '@/assets/icons/codex.svg';
@@ -266,7 +267,9 @@ export const formatModified = (item: AuthFileItem): string => {
     Number.isFinite(asNumber) && !Number.isNaN(asNumber)
       ? new Date(asNumber < 1e12 ? asNumber * 1000 : asNumber)
       : (parseTimestamp(raw) ?? new Date(String(raw)));
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+  return Number.isNaN(date.getTime())
+    ? '-'
+    : `${date.toLocaleString()} ${resolveTimeZoneLabel(date)}`;
 };
 
 // 检查模型是否被 OAuth 排除
