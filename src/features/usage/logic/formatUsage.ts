@@ -13,6 +13,8 @@
  * on the dashboard for no reason.
  */
 
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
+
 const COMPACT_SUFFIXES = ['', 'k', 'M', 'B', 'T'] as const;
 
 /**
@@ -121,9 +123,10 @@ export const formatBucketLabel = (
   }
 };
 
-/** Full stamp for tooltips and the request log. */
+/** Full stamp for tooltips and the request log, named with the display zone. */
 export const formatUsageInstant = (iso: string, locale?: string): string => {
   const parsed = Date.parse(iso);
   if (Number.isNaN(parsed)) return iso || '--';
-  return new Date(parsed).toLocaleString(locale);
+  const date = new Date(parsed);
+  return `${date.toLocaleString(locale)} ${resolveTimeZoneLabel(date)}`;
 };

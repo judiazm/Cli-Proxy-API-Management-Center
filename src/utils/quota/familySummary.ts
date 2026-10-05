@@ -62,10 +62,12 @@ export interface QuotaFamilySummary {
 /**
  * Preferred binding window per family, most-governing first.
  *
- * Claude's weekly Fable bucket is the one that actually runs out; Codex and
- * xAI are governed by the weekly limit. Anything not listed falls back to the
- * longest window a credential reports, because a weekly cap binds harder than
- * a five-hour one.
+ * Codex and xAI are governed by the weekly limit. Claude has two weekly
+ * buckets (all models, and the Fable-scoped one) and either can be the one that
+ * runs out, so Claude's binding window is whichever of its weekly columns has
+ * less capacity left across the family (see `CONTESTED_WEEKLY`). Anything not
+ * listed falls back to the longest window a credential reports, because a
+ * weekly cap binds harder than a five-hour one.
  */
 const BINDING_PREFERENCE: Record<QuotaProviderFamily, readonly string[]> = {
   claude: ['claude_quota.seven_day_fable', 'claude_quota.seven_day', 'claude_quota.five_hour'],
@@ -85,9 +87,40 @@ const BINDING_PREFERENCE: Record<QuotaProviderFamily, readonly string[]> = {
   kimi: [],
 };
 
-/** The plain 7-day total is worth keeping beside Claude's Fable headline. */
-const SECONDARY_COLUMN: Partial<Record<QuotaProviderFamily, string>> = {
-  claude: 'claude_quota.seven_day',
+/**
+ * Weekly columns that compete for the headline. The one with less summed
+ * remaining capacity binds; the other is shown beside it as the secondary.
+ * Ties keep list order.
+ */
+const CONTESTED_WEEKLY: Partial<Record<QuotaProviderFamily, readonly string[]>> = {
+  claude: ['claude_quota.seven_day', 'claude_quota.seven_day_fable'],
+};
+
+/** Summed remaining percent over members that reported the column. */
+const remainingShare = (members: readonly QuotaFamilyMember[], columnId: string): number => {
+  let total = 0;
+  let count = 0;
+  for (const member of members) {
+    const cell = member.model?.windows.find((window) => window.columnId === columnId);
+    if (cell?.remainingPercent === null || cell?.remainingPercent === undefined) continue;
+    total += cell.remainingPercent;
+    count += 1;
+  }
+  return count === 0 ? Number.POSITIVE_INFINITY : total / count;
+};
+
+/** Binding and secondary column of a contested family, or null when not contested. */
+const resolveContested = (
+  family: QuotaProviderFamily,
+  members: readonly QuotaFamilyMember[],
+  columns: Map<string, QuotaColumn>
+): { binding: string; secondary: string | null } | null => {
+  const present = (CONTESTED_WEEKLY[family] ?? []).filter((id) => columns.has(id));
+  if (present.length === 0) return null;
+  const ranked = [...present].sort(
+    (a, b) => remainingShare(members, a) - remainingShare(members, b)
+  );
+  return { binding: ranked[0], secondary: ranked[1] ?? null };
 };
 
 const toColumn = (cell: QuotaWindowCell): QuotaColumn => ({
@@ -119,6 +152,8 @@ export function resolveBindingColumnId(
   members: readonly QuotaFamilyMember[]
 ): string | null {
   const columns = collectColumns(members);
+  const contested = resolveContested(family, members, columns);
+  if (contested) return contested.binding;
   for (const preferred of BINDING_PREFERENCE[family] ?? []) {
     if (columns.has(preferred)) return preferred;
   }
@@ -204,7 +239,7 @@ export function buildQuotaFamilySummary(
   const bindingId = resolveBindingColumnId(family, members);
   const bindingColumn = bindingId ? (columns.get(bindingId) ?? null) : null;
 
-  const secondaryId = SECONDARY_COLUMN[family];
+  const secondaryId = resolveContested(family, members, columns)?.secondary ?? null;
   const secondaryColumn =
     secondaryId && secondaryId !== bindingId ? (columns.get(secondaryId) ?? null) : null;
 

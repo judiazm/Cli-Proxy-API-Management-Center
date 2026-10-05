@@ -288,6 +288,52 @@
   color: var(--danger-color);
 }
 
+.rowClickable {
+  cursor: pointer;
+}
+
+.rowFailed td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger-color);
+}
+
+.rowSlow td:first-child {
+  box-shadow: inset 3px 0 0 var(--warning-color);
+}
+
+.slowCell {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.actionActive {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.detailRow td {
+  background: var(--bg-secondary);
+}
+
+.detailList {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  text-align: left;
+
+  dt {
+    color: var(--text-secondary);
+  }
+
+  dd {
+    margin: 0;
+    font-family: $font-mono;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
 /* ---------- timeline ---------- */
 
 .chart {

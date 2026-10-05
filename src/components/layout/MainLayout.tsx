@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type MouseEvent as ReactMouseEvent,
   type SyntheticEvent,
 } from 'react';
@@ -54,6 +55,13 @@ import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
 import { getSidebarShortcutLabel, isSidebarToggleShortcut } from '@/utils/sidebarShortcut';
+import {
+  DISPLAY_TIME_ZONE_CHOICES,
+  getDisplayTimeZoneChoice,
+  setDisplayTimeZone,
+  subscribeDisplayTimeZone,
+  type DisplayTimeZoneChoice,
+} from '@/utils/time/displayZone';
 import type { Theme } from '@/types';
 
 const sidebarIcons: Record<string, ReactNode> = {
@@ -448,6 +456,16 @@ export function MainLayout() {
       window.removeEventListener('resize', updateContentCenter);
       document.documentElement.style.removeProperty('--content-center-x');
     };
+  }, []);
+
+  const displayZone = useSyncExternalStore(
+    subscribeDisplayTimeZone,
+    getDisplayTimeZoneChoice,
+    getDisplayTimeZoneChoice
+  );
+  const handleDisplayZoneSelect = useCallback((choice: DisplayTimeZoneChoice) => {
+    setDisplayTimeZone(choice);
+    setLanguageMenuOpen(false);
   }, []);
 
   const closeLanguageMenu = useCallback(() => setLanguageMenuOpen(false), []);
@@ -1053,8 +1071,8 @@ export function MainLayout() {
               variant="ghost"
               size="sm"
               onClick={toggleLanguageMenu}
-              title={t('language.switch')}
-              aria-label={t('language.switch')}
+              title={t('time_zone.menu_title')}
+              aria-label={t('time_zone.menu_title')}
               aria-haspopup="menu"
               aria-expanded={languageMenuOpen}
             >
@@ -1064,7 +1082,7 @@ export function MainLayout() {
               <div
                 className="notification entering language-menu-popover"
                 role="menu"
-                aria-label={t('language.switch')}
+                aria-label={t('time_zone.menu_title')}
               >
                 {LANGUAGE_ORDER.map((lang) => (
                   <button
@@ -1077,6 +1095,26 @@ export function MainLayout() {
                   >
                     <span>{t(LANGUAGE_LABEL_KEYS[lang])}</span>
                     {language === lang ? <span className="language-menu-check">✓</span> : null}
+                  </button>
+                ))}
+                <div className="language-menu-section" role="presentation">
+                  {t('time_zone.label')}
+                </div>
+                {DISPLAY_TIME_ZONE_CHOICES.map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    className={`language-menu-option ${displayZone === choice ? 'active' : ''}`}
+                    onClick={() => handleDisplayZoneSelect(choice)}
+                    role="menuitemradio"
+                    aria-checked={displayZone === choice}
+                  >
+                    <span>
+                      {t(
+                        `time_zone.${choice === 'America/New_York' ? 'miami' : choice === 'UTC' ? 'utc' : 'device'}`
+                      )}
+                    </span>
+                    {displayZone === choice ? <span className="language-menu-check">✓</span> : null}
                   </button>
                 ))}
               </div>
@@ -1227,6 +1265,7 @@ export function MainLayout() {
             }`}
           >
             <PageTransition
+              key={displayZone}
               render={(location) => <MainRoutes location={location} />}
               getRouteOrder={getRouteOrder}
               getTransitionVariant={getTransitionVariant}

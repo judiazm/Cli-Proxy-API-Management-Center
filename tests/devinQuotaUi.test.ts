@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import i18n from '@/i18n';
@@ -8,6 +8,7 @@ import { DEVIN_CONFIG } from '@/features/quota/providers/devin/data';
 import { DevinQuotaBody } from '@/features/quota/providers/devin/DevinQuotaBody';
 import { QUOTA_CLASS_KEYS, bindQuotaClasses } from '@/features/quota/types';
 import { classifyQuotaFiles, buildTabCounts } from '@/features/quota/logic';
+import { __setDisplayTimeZoneForTests } from '@/utils/time/displayZone';
 import { QUOTA_PROVIDER_TYPES } from '@/features/authFiles/constants';
 import { buildTimelineLane, projectLane } from '@/features/quota/quotaTimelineModel';
 import { collectQuotaRowInstants, nextRecoveryMs } from '@/features/quota/resetSchedule';
@@ -45,6 +46,9 @@ const snapshot = (): DevinQuotaState => ({
 });
 
 afterEach(() => useQuotaStore.getState().clearQuotaCache());
+// The fixture's resets fall on UTC midnights; read them in UTC.
+beforeAll(() => __setDisplayTimeZoneForTests('UTC'));
+afterAll(() => __setDisplayTimeZoneForTests('America/New_York'));
 
 describe('Devin quota UI integration', () => {
   test('registers the provider, filters disabled credentials, and counts its tab', () => {

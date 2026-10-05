@@ -160,6 +160,10 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(adapter.canResetQuota?.(quota));
+  // Same gate as the quota row: no reset would apply now, so nothing to click.
+  const resetNotApplicable =
+    (quota as { rateLimitResetCreditsApplicableAvailableCount?: number | null } | undefined)
+      ?.rateLimitResetCreditsApplicableAvailableCount === 0;
   const resetQuotaAction =
     adapter.resetQuota && showResetQuotaAction ? (
       <Button
@@ -168,9 +172,13 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         size="sm"
         className={styles.quotaResetCreditButton}
         onClick={() => resetQuotaForFile()}
-        disabled={!canUseResetQuota}
+        disabled={!canUseResetQuota || resetNotApplicable}
         loading={resettingQuota}
-        title={t('codex_quota.reset_button')}
+        title={
+          resetNotApplicable
+            ? t('codex_quota.reset_not_applicable_hint')
+            : t('codex_quota.reset_button')
+        }
         aria-label={t('codex_quota.reset_button')}
       >
         {!resettingQuota && <IconRefreshCw size={14} />}

@@ -273,6 +273,16 @@
     line-height: 1;
   }
 
+  .language-menu-section {
+    margin-top: 4px;
+    padding: 8px 10px 4px;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
   .theme-menu-popover {
     padding: $spacing-sm $spacing-sm $spacing-xs;
     display: flex;

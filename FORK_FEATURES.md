@@ -132,6 +132,68 @@ nothing; those, and any unrecognized answer, are shown as not reset instead of a
 Claude reset grants explain why no grant can be spent (throttled read, spent, ineligible, waiting
 for the limit) on the quota row, including when the row's own usage read failed.
 
+## Display time zone
+
+Every timestamp renders in one display zone, America/New_York (Miami) by default, named with
+its abbreviation (EDT/EST). The proxy host logs in UTC and browsers can run anywhere, so "local
+time" used to mean three different clocks.
+
+- `src/utils/time/displayZone.ts` holds the choice (Miami, UTC or this device), persists it in
+  `localStorage` (`cpamc.displayTimeZone`), and `installDisplayTimeZone()` (called first in
+  `src/main.tsx`) makes `toLocale*String` and `Intl.DateTimeFormat` default to it when a caller
+  names no zone. Upstream call sites are therefore covered without edits.
+- The choice sits in the header's language menu ("Language and time zone"); changing it
+  re-mounts the page content (`key={displayZone}` on `PageTransition`).
+- `resolveTimeZoneLabel` names the display zone; `formatInstantShort`, `formatDateTimeValue`,
+  `formatUnixTimestamp`, Usage request stamps and Forecast instants append it.
+- Log lines parse the server's offset-less stamps as UTC and render them in the display zone
+  (`formatLogInstant`), with the raw UTC stamp in the tooltip.
+- Grid arithmetic (timeline day columns, the forecast's Monday week) still follows the device
+  zone.
+
+## Plans and quota numbers
+
+- Codex `promax` is OpenAI's Pro 500 (2026-09-29): label "Pro 500", the same top finish as
+  Pro 200, and a "Speed: Ultrafast" note. Claude Max shows its multiplier from
+  `organization.rate_limit_tier` ("Max 20x", "Max 5x").
+- Pro and Pro 500 report one weekly window and no 5-hour window; their 5-hour cell reads "No
+  5-hour limit" (`absentLabelKeys` in the row model) instead of "Not reported".
+- Codex rows show the account's credit balance when it is above zero.
+- Manual resets show how many would apply now (`applicable_available_count`). When none would,
+  the Codex "Reset quota" button is disabled with the reason, on the Quota page and on Auth
+  Files: OpenAI answers `nothing_to_reset` and spends nothing until usage needs a reset.
+- Claude rows show until when a remaining reset grant is valid, and the confirm dialog states
+  the current 5-hour and weekly use before a grant is spent.
+- Claude's headline window is whichever weekly bucket (all models or Fable) has less left
+  across the family; the other is shown beside it (`CONTESTED_WEEKLY`).
+
+## Log requests view
+
+Logs has a Requests tab (`src/features/logs/components/LogRequestsView.tsx`, pure model in
+`src/features/logs/model/logRequestTable.ts`). It groups log lines by the 8-character request id,
+merges routing lines (`auth=`, `provider=`, `model=`) with the gin access line (status,
+duration, client IP, path), and joins each request to the usage store by id suffix (the log's id
+is the last 8 characters of the stored UUIDv7). Rows show time in the display zone, status,
+duration, time to first token, client key label or fingerprint (never the key), account
+nickname, model and alias, speed tier, tokens and path; a row expands to its log events and
+stored details. Filters: status class, in flight, errors and limits, first token at or over
+20 s, provider, account, model and text. It tails with the log stream. Management calls under
+any API version are hidden by the existing switch (`isManagementPath`).
+
+## Usage request details
+
+The Usage Requests view adds a Speed column (Fast, Ultrafast, Flex; standard left blank), the
+account nickname above its email, Failures and slow-first-token toggles with counts, row
+highlighting, and an expandable detail row (request id, endpoint, credential, session chain,
+asked and served tier, client IP and agent).
+
+## Hash navigation
+
+`PageTransition` keys layers with `resolveLayerKey`
+(`src/components/common/pageTransitionKey.ts`). A hand-edited hash, or back/forward onto one,
+arrives with `key: 'default'`; keyed on that alone, the second such navigation matched the
+current layer and the page never changed while the sidebar did.
+
 ## Release gate
 
 Before publishing any fork panel release:

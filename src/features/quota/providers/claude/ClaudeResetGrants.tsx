@@ -76,11 +76,22 @@ export function useClaudeResetGrants(
     const version = generation.current;
     const current = () =>
       session === apiClient.getConnectionRevision() && version === generation.current;
+    const grant = status?.grants.find((item) => item.id === selected);
+    const used = grant?.percentUsed ?? {};
+    const usage =
+      !pending && (used.five_hour !== undefined || used.seven_day !== undefined)
+        ? ' ' +
+          t('claude_reset.confirm_usage', {
+            fiveHour: used.five_hour ?? '--',
+            sevenDay: used.seven_day ?? '--',
+          })
+        : '';
     showConfirmation({
       title: t('claude_reset.title'),
-      message: t(pending ? 'claude_reset.retry_confirm' : 'claude_reset.confirm_text', {
-        name: displayName,
-      }),
+      message:
+        t(pending ? 'claude_reset.retry_confirm' : 'claude_reset.confirm_text', {
+          name: displayName,
+        }) + usage,
       confirmText: t(pending ? 'claude_reset.retry' : 'claude_reset.confirm'),
       variant: 'primary',
       onConfirm: async () => {
@@ -115,8 +126,16 @@ export function useClaudeResetGrants(
       },
     });
   };
+  // Soonest expiry among grants that still hold a reset.
+  const expiresAtMs =
+    status?.grants
+      .filter((grant) => grant.resetsLeft > 0 && grant.endsAt)
+      .map((grant) => Date.parse(grant.endsAt as string))
+      .filter((ms) => Number.isFinite(ms))
+      .sort((a, b) => a - b)[0] ?? null;
   return {
     count: status?.grants.reduce((sum, grant) => sum + grant.resetsLeft, 0) ?? null,
+    expiresAtMs,
     busy,
     blocked,
     confirm,

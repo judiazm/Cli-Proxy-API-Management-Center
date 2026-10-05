@@ -260,3 +260,25 @@ describe('buildQuotaFamilySummary', () => {
     expect(summary.binding?.readingCount).toBe(1);
   });
 });
+
+describe('Claude headline follows the tighter weekly bucket', () => {
+  test('the all-model 7-day limit leads when it has less left than Fable', () => {
+    // 2026-10-05: one account exhausted its 7-day limit while Fable stayed full.
+    const members = [
+      memberOf('outlook', claudeCredential(100, 0, NOW + DAY_MS), 'claude'),
+      memberOf('mwa', claudeCredential(100, 96, NOW + DAY_MS), 'claude'),
+    ];
+    const summary = buildQuotaFamilySummary('claude', members, NOW);
+    expect(summary.binding?.column.columnId).toBe('claude_quota.seven_day');
+    expect(summary.binding?.totalRemainingPercent).toBe(96);
+    expect(summary.secondary?.column.columnId).toBe('claude_quota.seven_day_fable');
+    expect(buildQuotaColumns('claude', members)[0].columnId).toBe('claude_quota.seven_day');
+  });
+
+  test('Fable leads when it is the bucket running out', () => {
+    const members = [memberOf('a', claudeCredential(10, 80, NOW + DAY_MS), 'claude')];
+    const summary = buildQuotaFamilySummary('claude', members, NOW);
+    expect(summary.binding?.column.columnId).toBe('claude_quota.seven_day_fable');
+    expect(summary.secondary?.column.columnId).toBe('claude_quota.seven_day');
+  });
+});

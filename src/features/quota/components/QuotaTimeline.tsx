@@ -30,18 +30,20 @@ import {
 import type { TimelineLane, TimelineMode } from '../quotaTimelineModel';
 import type { QuotaFileEntry } from '../logic';
 import type { QuotaCardState } from '../providers';
+import { zonedDateParts } from '@/utils/time/displayZone';
 import styles from './QuotaTimeline.module.scss';
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 const pad = (value: number) => String(value).padStart(2, '0');
+// Tick labels follow the panel's display zone; the day grid itself follows the device.
 const formatDay = (ms: number) => {
-  const d = new Date(ms);
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+  const d = zonedDateParts(ms);
+  return `${pad(d.month)}/${pad(d.day)}`;
 };
 const formatTime = (ms: number) => {
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = zonedDateParts(ms);
+  return `${pad(d.hour)}:${pad(d.minute)}`;
 };
 
 export interface QuotaTimelineProps {

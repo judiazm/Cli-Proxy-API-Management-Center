@@ -136,6 +136,9 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
     Boolean(adapter.resetQuota) &&
     quota !== undefined &&
     Boolean(adapter.canResetQuota?.(quota));
+  // OpenAI spends a manual reset only when usage needs one; when none would
+  // apply, the consume answers `nothing_to_reset`. Say so before the click.
+  const resetNotApplicable = model?.manualResets?.applicable === 0;
 
   const cellsById = new Map((model?.windows ?? []).map((cell) => [cell.columnId, cell]));
   const urgentId = urgentColumnId(model?.windows ?? [], nowMs);
@@ -151,12 +154,14 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
   const renderWindowCell = (column: QuotaColumn) => {
     const cell = cellsById.get(column.columnId);
     if (!cell) {
+      const absentKey =
+        model?.absentLabelKeys?.[column.columnId] ?? 'quota_management.not_reported';
       return (
         <div key={column.columnId} className={`${styles.cell} ${styles.cellAbsent}`}>
           <span className={styles.cellLabel} title={columnLabel(column)}>
             {columnLabel(column)}
           </span>
-          <span className={styles.cellNone}>{t('quota_management.not_reported')}</span>
+          <span className={styles.cellNone}>{t(absentKey)}</span>
         </div>
       );
     }
@@ -215,6 +220,16 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
           </span>
           <span className={styles.cellValue}>{manualResets.count ?? '--'}</span>
         </div>
+        {manualResets.applicable !== null && (manualResets.count ?? 0) > 0 && (
+          <span
+            className={manualResets.applicable > 0 ? styles.cellReset : styles.cellNone}
+            title={t('codex_quota.reset_not_applicable_hint')}
+          >
+            {manualResets.applicable > 0
+              ? t('codex_quota.resets_usable_now', { count: manualResets.applicable })
+              : t('codex_quota.resets_none_usable')}
+          </span>
+        )}
         {manualResets.credits.length > 0 && (
           <div
             className={styles.credits}
@@ -332,6 +347,13 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
                 <span className={styles.note}>
                   <span className={styles.noteLabel}>{t('claude_reset.remaining')}</span>
                   <span className={styles.noteValue}>{claudeReset.count ?? '--'}</span>
+                  {claudeReset.expiresAtMs !== null && (claudeReset.count ?? 0) > 0 && (
+                    <span className={styles.noteLabel}>
+                      {t('claude_reset.until', {
+                        date: formatInstantShort(claudeReset.expiresAtMs),
+                      })}
+                    </span>
+                  )}
                 </span>
               )}
               {model?.plan && (
@@ -390,8 +412,12 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
             type="button"
             className={styles.actionPill}
             onClick={onReset}
-            disabled={!canRefresh || loading || resetting}
-            title={t('codex_quota.reset_button')}
+            disabled={!canRefresh || loading || resetting || resetNotApplicable}
+            title={
+              resetNotApplicable
+                ? t('codex_quota.reset_not_applicable_hint')
+                : t('codex_quota.reset_button')
+            }
           >
             <IconRefreshCw size={12} className={resetting ? styles.spinning : undefined} />
             {t('codex_quota.reset_button')}

@@ -1,3 +1,4 @@
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import { parseTimestamp } from './timestamp';
 
 /**
@@ -104,7 +105,8 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
   })();
 
   if (Number.isNaN(date.getTime())) return '';
-  return locale ? date.toLocaleString(locale) : date.toLocaleString();
+  const text = locale ? date.toLocaleString(locale) : date.toLocaleString();
+  return `${text} ${resolveTimeZoneLabel(date)}`;
 }
 
 export function parseDateValue(value: unknown): Date | null {
@@ -127,5 +129,6 @@ export function formatDateValue(value: unknown, locale?: string): string {
 export function formatDateTimeValue(value: unknown, locale?: string): string {
   const date = parseDateValue(value);
   if (!date) return '';
-  return locale ? date.toLocaleString(locale) : date.toLocaleString();
+  const text = locale ? date.toLocaleString(locale) : date.toLocaleString();
+  return `${text} ${resolveTimeZoneLabel(date)}`;
 }

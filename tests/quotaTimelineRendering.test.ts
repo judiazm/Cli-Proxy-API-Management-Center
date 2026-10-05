@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { __setDisplayTimeZoneForTests } from '@/utils/time/displayZone';
 import '../src/i18n/index';
 import { QuotaTimeline } from '../src/features/quota/components/QuotaTimeline';
 import type { QuotaFileEntry } from '../src/features/quota/logic';
@@ -19,6 +20,10 @@ const baseProps = {
   resolvedTheme: 'light' as const,
   now: new Date(2026, 6, 29, 12).getTime(),
 };
+
+// Expiry stamps in these fixtures are UTC instants read as UTC wall time.
+beforeAll(() => __setDisplayTimeZoneForTests('UTC'));
+afterAll(() => __setDisplayTimeZoneForTests('America/New_York'));
 
 describe('QuotaTimeline rendering', () => {
   test('shows the selected period date instead of always labelling it Today', () => {

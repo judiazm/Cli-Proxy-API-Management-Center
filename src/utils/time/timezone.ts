@@ -1,3 +1,5 @@
+import { displayZoneAbbreviation, getDisplayTimeZone } from './displayZone';
+
 /**
  * The viewer's UTC offset, as a short label.
  *
@@ -40,5 +42,11 @@ export function formatUtcOffsetLabel(offsetMinutes: number): string {
  * answers differently in January than in July.
  */
 export function resolveTimeZoneLabel(date: Date = new Date()): string {
+  // Timestamps render in the panel's display zone (Miami by default), so name
+  // that zone (EDT/EST/UTC) rather than the device's offset.
+  if (getDisplayTimeZone()) {
+    const name = displayZoneAbbreviation(date);
+    if (name) return name;
+  }
   return formatUtcOffsetLabel(-date.getTimezoneOffset());
 }

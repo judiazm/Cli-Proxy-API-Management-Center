@@ -8,6 +8,7 @@ import {
   PREMIUM_CODEX_PLAN_TYPES,
   resolvePlanTier,
 } from '@/utils/quota';
+import { codexPlanBadge } from '@/utils/quota/rowModel';
 
 describe('Codex Pro display names', () => {
   for (const [locale, messages] of Object.entries({ en, 'zh-CN': zhCN, 'zh-TW': zhTW, ru })) {
@@ -58,4 +59,19 @@ describe('resolvePlanTier', () => {
     expect(resolvePlanTier('')).toBe('plain');
     expect(resolvePlanTier('   ')).toBe('plain');
   });
+});
+
+describe('Codex Pro 500 (plan=promax)', () => {
+  test('shares the top finish with Pro 200 and gets its own label', () => {
+    expect(resolvePlanTier('promax')).toBe('elite');
+    expect(resolvePlanTier('ProMax')).toBe('elite');
+    expect(codexPlanBadge('promax')).toEqual({ labelKey: 'codex_quota.plan_promax', tier: 'elite' });
+    expect(codexPlanBadge('pro')).toEqual({ labelKey: 'codex_quota.plan_pro', tier: 'elite' });
+  });
+
+  for (const [locale, messages] of Object.entries({ en, 'zh-CN': zhCN, 'zh-TW': zhTW, ru })) {
+    test(`${locale} labels promax as Pro 500`, () => {
+      expect(messages.codex_quota.plan_promax).toBe('Pro 500');
+    });
+  }
 });

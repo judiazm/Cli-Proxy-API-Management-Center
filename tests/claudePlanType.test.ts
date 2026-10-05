@@ -67,4 +67,18 @@ describe('Claude plan type', () => {
       expect(resolveClaudePlanType(profile)).toBeNull();
     }
   );
+
+  test.each([
+    ['default_claude_max_20x', 'plan_max20'],
+    ['default_claude_max_5x', 'plan_max5'],
+    ['some_future_tier', 'plan_max'],
+    [undefined, 'plan_max'],
+  ] as const)('names the Max multiplier from rate_limit_tier %s', (tier, expected) => {
+    expect(
+      resolveClaudePlanType({
+        account: { has_claude_max: true, has_claude_pro: false },
+        organization: { organization_type: 'claude_max', rate_limit_tier: tier },
+      })
+    ).toBe(expected);
+  });
 });

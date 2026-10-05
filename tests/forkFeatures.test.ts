@@ -18,6 +18,11 @@ describe('fork feature manifest', () => {
       '## Object-form API keys',
       '## Persistent Usage',
       '## Reset outcomes',
+      '## Display time zone',
+      '## Plans and quota numbers',
+      '## Log requests view',
+      '## Usage request details',
+      '## Hash navigation',
       '## Release gate',
     ]) {
       expect(manifest).toContain(required);
@@ -157,5 +162,61 @@ describe('both-provider forecast contract', () => {
     expect(forecast).toContain("unknownForecast('store-losses'");
     expect(forecast).toContain('FORECAST_MAX_AGE_MS');
     expect(forecast).toContain('includesImportedReadings');
+  });
+});
+
+describe('2026-10-05 dashboard pass contract', () => {
+  test('timestamps default to Miami time and the choice lives in the header menu', () => {
+    const zone = read('src/utils/time/displayZone.ts');
+    expect(zone).toContain("DEFAULT_DISPLAY_TIME_ZONE = 'America/New_York'");
+    expect(read('src/main.tsx')).toContain('installDisplayTimeZone();');
+    const layout = read('src/components/layout/MainLayout.tsx');
+    expect(layout).toContain('DISPLAY_TIME_ZONE_CHOICES.map');
+    expect(layout).toContain('key={displayZone}');
+    expect(read('src/utils/quota/relativeTime.ts')).toContain('displayZoneAbbreviation(date)');
+    expect(read('src/features/logs/LogsPage.tsx')).toContain(
+      'formatServerLogTimestamp(line.timestamp)'
+    );
+  });
+
+  test('plans, weekly-only Codex rows and reset applicability stay wired', () => {
+    const rowModel = read('src/utils/quota/rowModel.ts');
+    expect(rowModel).toContain("'codex_quota.plan_promax'");
+    expect(rowModel).toContain("'codex_quota.no_five_hour_limit'");
+    expect(rowModel).toContain('rateLimitResetCreditsApplicableAvailableCount');
+    expect(read('src/utils/quota/planTier.ts')).toContain("ELITE_CODEX_PLAN_TYPE, 'promax'");
+    expect(read('src/features/quota/providers/claude/data.ts')).toContain("return 'plan_max20'");
+    expect(read('src/utils/quota/familySummary.ts')).toContain('CONTESTED_WEEKLY');
+    const row = read('src/features/quota/components/QuotaCredentialRow.tsx');
+    expect(row).toContain('resetNotApplicable');
+    expect(row).toContain('model?.absentLabelKeys?.[column.columnId]');
+    expect(read('src/features/authFiles/components/AuthFileQuotaSection.tsx')).toContain(
+      'resetNotApplicable'
+    );
+  });
+
+  test('the Logs page keeps its Requests tab joined to the usage store', () => {
+    const page = read('src/features/logs/LogsPage.tsx');
+    expect(page).toContain("type TabType = 'logs' | 'requests' | 'errors';");
+    expect(page).toContain('<LogRequestsView');
+    expect(page).toContain("active: activeTab === 'logs' || activeTab === 'requests'");
+    const view = read('src/features/logs/components/LogRequestsView.tsx');
+    expect(view).toContain('indexUsageRowsByShortId(usageRows)');
+    expect(view).toContain('resolveDeviceName(key, devices)');
+    expect(existsSync(join(root, 'src/features/logs/model/logRequestTable.ts'))).toBe(true);
+  });
+
+  test('usage request rows keep speed, failure and slow-first-token detail', () => {
+    const view = read('src/features/usage/components/UsageRequestsView.tsx');
+    expect(view).toContain("t('usage.column_speed')");
+    expect(view).toContain('usage.requests_failures_only');
+    expect(view).toContain('usage.requests_slow_only');
+    expect(view).toContain('styles.detailRow');
+  });
+
+  test('hand-edited hashes and back/forward still change the page', () => {
+    expect(read('src/components/common/PageTransition.tsx')).toContain(
+      'const locationLayerKey = resolveLayerKey(location);'
+    );
   });
 });

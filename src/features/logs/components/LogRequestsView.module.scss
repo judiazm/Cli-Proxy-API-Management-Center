@@ -1,0 +1,329 @@
+.view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+  padding: 12px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.search {
+  flex: 1 1 260px;
+  min-width: 200px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chipActive {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
+}
+
+.chipDanger.chipActive {
+  color: var(--failure-badge-text);
+  border-color: var(--error-color);
+  background: var(--failure-badge-bg);
+}
+
+.chipWarn.chipActive {
+  color: var(--warning-text);
+  border-color: var(--warning-color);
+  background: var(--warning-bg);
+}
+
+.chipCount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.select {
+  height: 30px;
+  max-width: 240px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.clear {
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    vertical-align: top;
+  }
+}
+
+.row {
+  cursor: pointer;
+  border-left: 3px solid transparent;
+
+  &:hover {
+    background: color-mix(in srgb, var(--primary-color) 4%, transparent);
+  }
+
+  td:first-child {
+    border-left: 3px solid transparent;
+  }
+}
+
+.rowError td:first-child {
+  border-left-color: var(--error-color);
+}
+
+.rowWarn td:first-child {
+  border-left-color: var(--warning-color);
+}
+
+.rowPending {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.time {
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-family: $font-mono;
+}
+
+.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.slow {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.status {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusOk {
+  color: var(--success-badge-text);
+  background: var(--success-badge-bg);
+}
+
+.statusWarn {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.statusError {
+  color: var(--failure-badge-text);
+  background: var(--failure-badge-bg);
+}
+
+.statusPending {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.flag {
+  margin-left: 6px;
+  color: var(--warning-text);
+  font-size: 11px;
+}
+
+.primary {
+  display: block;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.secondary {
+  display: block;
+  color: var(--text-secondary);
+  font-family: $font-mono;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tier {
+  color: var(--text-secondary);
+}
+
+.tierUltrafast {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.request {
+  max-width: 340px;
+}
+
+.method {
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.path {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-family: $font-mono;
+}
+
+.detailRow td {
+  background: var(--bg-secondary);
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0 0 8px;
+
+  dt {
+    color: var(--text-secondary);
+  }
+
+  dd {
+    margin: 0;
+    font-family: $font-mono;
+    overflow-wrap: anywhere;
+  }
+}
+
+.events {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: $font-mono;
+  font-size: 11px;
+
+  li {
+    display: flex;
+    gap: 10px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.eventWarn {
+  color: var(--warning-text);
+}
+
+.eventError {
+  color: var(--failure-badge-text);
+}
+
+.eventTime {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.eventSource {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.more {
+  align-self: center;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}

@@ -11,6 +11,8 @@
  * testable and the caller decides how often it ticks (see `useNow`).
  */
 
+import { displayZoneAbbreviation, getDisplayTimeZone } from '@/utils/time/displayZone';
+
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@/utils/time/durations';
 
 export interface RelativeTimeParts {
@@ -75,18 +77,23 @@ export function formatRelativeInstant(targetMs: number, nowMs: number, locale?: 
 
 /**
  * Absolute instant in the shape every quota row already uses (`MM-DD HH:mm`,
- * browser-local, 24-hour). Kept in one place so the reset labels baked at fetch
- * time and the ones formatted at render time can never drift apart.
+ * 24-hour) in the panel's display zone, followed by that zone's name (`EDT`).
+ * Kept in one place so the reset labels baked at fetch time and the ones
+ * formatted at render time can never drift apart.
  */
 export function formatInstantShort(ms: number): string {
   if (!Number.isFinite(ms)) return '-';
-  return new Date(ms).toLocaleString(undefined, {
+  const date = new Date(ms);
+  const text = date.toLocaleString(undefined, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: getDisplayTimeZone(),
   });
+  const zone = getDisplayTimeZone() ? displayZoneAbbreviation(date) : '';
+  return zone ? `${text} ${zone}` : text;
 }
 
 export interface ResetDisplay {

@@ -7,10 +7,11 @@
  * appeared twice, in two timezones, on one screen.
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import i18n from '@/i18n';
 import * as resetCredits from '@/utils/quota/resetCredits';
 import { formatUtcOffsetLabel, resolveTimeZoneLabel } from '@/utils/time/timezone';
+import { __setDisplayTimeZoneForTests } from '@/utils/time/displayZone';
 
 describe('formatUtcOffsetLabel', () => {
   test('renders whole-hour offsets east and west of UTC', () => {
@@ -37,6 +38,11 @@ describe('formatUtcOffsetLabel', () => {
 });
 
 describe('resolveTimeZoneLabel', () => {
+  // These two cases cover the device-zone fallback; the display-zone default
+  // (Miami) is pinned in tests/displayZone.test.ts.
+  beforeEach(() => __setDisplayTimeZoneForTests('local'));
+  afterEach(() => __setDisplayTimeZoneForTests('America/New_York'));
+
   test('produces a well-formed label whatever timezone the runner is in', () => {
     expect(resolveTimeZoneLabel()).toMatch(/^GMT([+-]\d{1,2}(:\d{2})?)?$/);
   });

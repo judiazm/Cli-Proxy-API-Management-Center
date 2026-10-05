@@ -19,6 +19,7 @@ import { useAuthStore, useQuotaStore } from '@/stores';
 import { displayCredentialLabel } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { browserTimeZone } from '@/features/usage/logic/timeRange';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import { formatUsageCount, formatUsageExact } from '@/features/usage/logic/formatUsage';
 import { useQuotaBatchLoader } from '@/features/quota/hooks/useQuotaBatchLoader';
 import { classifyQuotaFiles, type QuotaFileEntry } from '@/features/quota/logic';
@@ -261,12 +262,12 @@ export function QuotaForecastPage() {
   const formatInstant = (value: number | null): string =>
     value === null
       ? '--'
-      : new Date(value).toLocaleString(i18n.resolvedLanguage, {
+      : `${new Date(value).toLocaleString(i18n.resolvedLanguage, {
           month: 'short',
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
-        });
+        })} ${resolveTimeZoneLabel(new Date(value))}`;
 
   const forecastText = (forecast: QuotaForecast): string => {
     switch (forecast.outcome) {

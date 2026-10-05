@@ -31,7 +31,12 @@ describe('log selectors use the whole retained buffer', () => {
       '[2026-06-15 10:00:00] [--------] [info ] Registered /v8/management/config endpoint';
     const entries = parse(
       applyLogPage(emptyLogBuffer(), {
-        lines: [access('/v8/management/logs?limit=10'), text, access('/v8/management-other')],
+        lines: [
+          access('/v8/management/logs?limit=10'),
+          access('/v0/management/auth-files'),
+          text,
+          access('/v8/management-other'),
+        ],
       })
     );
     expect(searchLogEntries(entries, '', true).map((entry) => entry.raw)).toEqual([

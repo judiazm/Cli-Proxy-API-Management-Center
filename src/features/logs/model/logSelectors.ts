@@ -10,6 +10,17 @@ import type { LogBuffer } from './logBuffer';
 
 export type LogEntry = ParsedLogLine & { id: number };
 
+/**
+ * Management calls under any API version. The panel uses `/v8`, but the
+ * proxy's own maintenance scripts poll `/v0/management`, and those lines are
+ * noise in the same way.
+ */
+const LEGACY_MANAGEMENT_PATH = /^\/v\d+\/management(\/|$)/;
+export const isManagementPath = (path: string): boolean =>
+  path === MANAGEMENT_API_PREFIX ||
+  path.startsWith(`${MANAGEMENT_API_PREFIX}/`) ||
+  LEGACY_MANAGEMENT_PATH.test(path);
+
 /** Cache only the current buffer. Repeated text remains separate records. */
 export function createLogParserCache() {
   let cache = new Map<number, LogEntry>();
@@ -35,12 +46,7 @@ export function searchLogEntries(
   const needle = query.trim().toLowerCase();
   return entries.filter((entry) => {
     const path = entry.path?.split('?')[0];
-    if (
-      hideManagement &&
-      path &&
-      (path === MANAGEMENT_API_PREFIX || path.startsWith(`${MANAGEMENT_API_PREFIX}/`))
-    )
-      return false;
+    if (hideManagement && path && isManagementPath(path)) return false;
     return !needle || entry.raw.toLowerCase().includes(needle);
   });
 }

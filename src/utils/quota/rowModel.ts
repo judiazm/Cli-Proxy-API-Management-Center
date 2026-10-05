@@ -95,6 +95,12 @@ export interface QuotaManualResetCredit {
 
 export interface QuotaManualResets {
   count: number | null;
+  /**
+   * Resets OpenAI would apply right now (`applicable_available_count`). A reset
+   * only applies when usage needs one; otherwise the consume answers
+   * `nothing_to_reset` and spends nothing. Null when the payload omits it.
+   */
+  applicable: number | null;
   credits: QuotaManualResetCredit[];
   error: string;
 }
@@ -106,6 +112,12 @@ export interface QuotaCredentialRowModel {
   notes: QuotaRowNote[];
   manualResets: QuotaManualResets | null;
   windows: QuotaWindowCell[];
+  /**
+   * Why a column has no cell for this credential, by column id. Pro and Pro 500
+   * report a single weekly window, so their 5-hour column reads "No 5-hour
+   * limit" rather than "Not reported".
+   */
+  absentLabelKeys?: Record<string, string>;
   /** Shown in place of the cells when a credential reports nothing usable. */
   messageKey: string | null;
 }
@@ -150,6 +162,7 @@ export function codexPlanBadge(planType: string | null | undefined): QuotaPlanBa
   const normalized = normalizePlanType(planType);
   if (!normalized) return null;
   const tier = resolvePlanTier(planType);
+  if (normalized === 'promax') return { labelKey: 'codex_quota.plan_promax', tier };
   if (normalized === 'pro') return { labelKey: 'codex_quota.plan_pro', tier };
   if (normalized === 'self_serve_business_prolite') {
     return { labelKey: 'codex_quota.plan_business_premium', tier };
@@ -284,11 +297,27 @@ const buildCodexModel = (quota: CodexQuotaState): QuotaCredentialRowModel => {
   );
 
   const availableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
+  const applicable = quota.rateLimitResetCreditsApplicableAvailableCount ?? null;
   const error = quota.rateLimitResetCreditsError ?? '';
   const manualResets =
     availableCount === null && credits.length === 0 && !error
       ? null
-      : { count: availableCount, credits, error };
+      : { count: availableCount, applicable, credits, error };
+
+  const notes: QuotaRowNote[] = [];
+  if (normalizePlanType(quota.planType) === 'promax') {
+    notes.push({ labelKey: 'codex_quota.speed_label', valueKey: 'codex_quota.ultrafast' });
+  }
+  if (quota.creditsUnlimited) {
+    notes.push({ labelKey: 'codex_quota.credit_balance_label', valueKey: 'codex_quota.credit_unlimited' });
+  } else if (quota.creditBalance && Number(quota.creditBalance) > 0) {
+    notes.push({
+      labelKey: 'codex_quota.credit_balance_label',
+      value: new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+        Number(quota.creditBalance)
+      ),
+    });
+  }
 
   const windows = (quota.windows ?? []).map<QuotaWindowCell>((window) => ({
     columnId: columnIdFrom(window.labelKey, window.labelParams, window.id),
@@ -301,12 +330,20 @@ const buildCodexModel = (quota: CodexQuotaState): QuotaCredentialRowModel => {
     periodHours: window.periodHours ?? null,
   }));
 
+  // Pro and Pro 500 report one weekly window and no 5-hour window at all.
+  const hasWeekly = (quota.windows ?? []).some((w) => w.id === 'weekly' || w.id === 'monthly');
+  const hasFiveHour = (quota.windows ?? []).some((w) => w.id === 'five-hour');
+  const absentLabelKeys: Record<string, string> =
+    hasWeekly && !hasFiveHour ? { 'codex_quota.primary_window': 'codex_quota.no_five_hour_limit' } : {};
+
   return {
     ...EMPTY_MODEL,
     plan: codexPlanBadge(quota.planType),
     renewal,
+    notes,
     manualResets,
     windows,
+    absentLabelKeys,
     messageKey: windows.length === 0 ? 'codex_quota.empty_windows' : null,
   };
 };

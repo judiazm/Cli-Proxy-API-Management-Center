@@ -45,12 +45,21 @@ import { createLogRequestGuard } from './model/logRequests';
 import { errorLogViewerReducer } from './model/errorLogViewer';
 import { shouldExitLogFullscreen } from './model/logFullscreen';
 import { useLogFilters } from './hooks/useLogFilters';
+import { LogRequestsView } from './components/LogRequestsView';
+import { formatLogInstant, parseServerLogTimestamp } from '@/utils/time/displayZone';
 import { isNearBottom, useLogScroller } from './hooks/useLogScroller';
 import styles from './LogsPage.module.scss';
 
 const INITIAL_DISPLAY_LINES = INITIAL_VISIBLE_LINES;
 
-type TabType = 'logs' | 'errors';
+type TabType = 'logs' | 'requests' | 'errors';
+
+/** Server log stamps are UTC without an offset; show them in the display zone. */
+const formatServerLogTimestamp = (value: string | undefined): string => {
+  if (!value) return '';
+  const ms = parseServerLogTimestamp(value);
+  return ms === null ? value : formatLogInstant(ms);
+};
 
 export function LogsPage() {
   const { t } = useTranslation();
@@ -105,7 +114,7 @@ export function LogsPage() {
     loadLogs,
     clearLogs,
   } = useLogStream({
-    active: activeTab === 'logs',
+    active: activeTab === 'logs' || activeTab === 'requests',
     isFollowing: () => isNearBottom(logViewerRef.current),
     onFollow: () => requestScrollToBottom(),
   });
@@ -412,6 +421,17 @@ export function LogsPage() {
           </button>
           <button
             type="button"
+            className={`${styles.tabItem} ${activeTab === 'requests' ? styles.tabActive : ''}`}
+            aria-pressed={activeTab === 'requests'}
+            onClick={() => {
+              setFullscreenLogs(false);
+              setActiveTab('requests');
+            }}
+          >
+            {t('logs.requests_tab')}
+          </button>
+          <button
+            type="button"
             className={`${styles.tabItem} ${activeTab === 'errors' ? styles.tabActive : ''}`}
             aria-pressed={activeTab === 'errors'}
             onClick={() => {
@@ -425,6 +445,11 @@ export function LogsPage() {
       </header>
 
       <div className={styles.content}>
+        {activeTab === 'requests' && (
+          <Card className={styles.logCard}>
+            <LogRequestsView entries={entries} hideManagement={hideManagementLogs} />
+          </Card>
+        )}
         {activeTab === 'logs' && (
           <Card
             className={[styles.logCard, fullscreenLogs ? styles.logCardFullscreen : '']
@@ -821,7 +846,12 @@ export function LogsPage() {
                               defaultValue: 'Double-click to copy',
                             })}
                           >
-                            <div className={styles.timestamp}>{line.timestamp || ''}</div>
+                            <div
+                              className={styles.timestamp}
+                              title={line.timestamp ? `${line.timestamp} UTC` : undefined}
+                            >
+                              {formatServerLogTimestamp(line.timestamp)}
+                            </div>
                             <div className={styles.rowMain}>
                               {line.level && (
                                 <span

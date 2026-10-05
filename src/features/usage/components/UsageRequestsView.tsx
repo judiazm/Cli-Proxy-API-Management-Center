@@ -10,7 +10,7 @@
  * open. Offset paging would show the same request twice and skip another.
  */
 
-import { useCallback } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconDownload, IconLoader2 } from '@/components/ui/icons';
 import type { UsageRequestRow } from '@/services/api';
@@ -20,6 +20,7 @@ import { formatUsageCount, formatUsageDuration, formatUsageInstant } from '../lo
 import { resolveAccountName, resolveDeviceName, resolveModelName } from '../logic/naming';
 import type { AccountIndex, DeviceIndex } from '../logic/naming';
 import { requestStatusKey } from '../logic/requestStatus';
+import { describeServiceTier, SLOW_FIRST_TOKEN_MS } from '@/features/logs/model/logRequestTable';
 import styles from './UsageViews.module.scss';
 
 export interface UsageRequestsViewProps {
@@ -69,12 +70,43 @@ export function UsageRequestsView({
     [accounts, t]
   );
 
+  /** The account's nickname (auth-file note), when it has one. */
+  const accountNickname = useCallback(
+    (row: UsageRequestRow): string => {
+      const name = resolveAccountName(row.auth_id, accounts);
+      if (name.kind === 'raw') return '';
+      const note = accounts.get(name.file.toLowerCase())?.note;
+      return typeof note === 'string' ? note.trim() : '';
+    },
+    [accounts]
+  );
+
+  const speedLabel = useCallback(
+    (row: UsageRequestRow): string => {
+      const tier = describeServiceTier(row);
+      return tier && tier !== 'standard' ? t(`logs.requests_tier_${tier}`) : '';
+    },
+    [t]
+  );
+
+  const [failuresOnly, setFailuresOnly] = useState(false);
+  const [slowOnly, setSlowOnly] = useState(false);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const isSlow = (row: UsageRequestRow) => row.ttft_ms >= SLOW_FIRST_TOKEN_MS;
+  const failedCount = useMemo(() => rows.filter((row) => row.failed).length, [rows]);
+  const slowCount = useMemo(() => rows.filter(isSlow).length, [rows]);
+  const shownRows = useMemo(
+    () => rows.filter((row) => (!failuresOnly || row.failed) && (!slowOnly || isSlow(row))),
+    [rows, failuresOnly, slowOnly]
+  );
+
   const handleExport = useCallback(() => {
     const header = [
       t('usage.column_time'),
       t('usage.dim_device'),
       t('usage.dim_model'),
       t('usage.column_alias'),
+      t('usage.column_speed'),
       t('usage.dim_account'),
       t('usage.dim_effort'),
       t('usage.dim_stream'),
@@ -95,6 +127,7 @@ export function UsageRequestsView({
       deviceLabel(row).primary,
       row.model,
       row.alias,
+      speedLabel(row),
       accountLabel(row),
       row.reasoning_effort,
       row.stream ? 'true' : 'false',
@@ -114,7 +147,7 @@ export function UsageRequestsView({
       filename: usageCsvFilename(),
       blob: csvBlob(serializeCsv({ header, rows: csvRows })),
     });
-  }, [rows, deviceLabel, accountLabel, t]);
+  }, [rows, deviceLabel, accountLabel, speedLabel, t]);
 
   if (rows.length === 0 && !loading) {
     return (
@@ -129,6 +162,26 @@ export function UsageRequestsView({
       <div className={styles.panelHead}>
         <p className={styles.panelNote}>{t('usage.requests_note', { count: rows.length })}</p>
         <div className={styles.panelActions}>
+          <button
+            type="button"
+            className={`${styles.action} ${failuresOnly ? styles.actionActive : ''}`}
+            aria-pressed={failuresOnly}
+            onClick={() => setFailuresOnly((value) => !value)}
+          >
+            {t('usage.requests_failures_only', { count: failedCount })}
+          </button>
+          <button
+            type="button"
+            className={`${styles.action} ${slowOnly ? styles.actionActive : ''}`}
+            aria-pressed={slowOnly}
+            onClick={() => setSlowOnly((value) => !value)}
+            title={t('logs.requests_slow_hint', { seconds: SLOW_FIRST_TOKEN_MS / 1000 })}
+          >
+            {t('usage.requests_slow_only', {
+              count: slowCount,
+              seconds: SLOW_FIRST_TOKEN_MS / 1000,
+            })}
+          </button>
           <button
             type="button"
             className={styles.action}
@@ -150,6 +203,7 @@ export function UsageRequestsView({
               </th>
               <th scope="col">{t('usage.dim_device')}</th>
               <th scope="col">{t('usage.dim_model')}</th>
+              <th scope="col">{t('usage.column_speed')}</th>
               <th scope="col">{t('usage.dim_account')}</th>
               <th scope="col">{t('usage.dim_effort')}</th>
               <th scope="col">{t('usage.dim_stream')}</th>
@@ -166,58 +220,120 @@ export function UsageRequestsView({
           </thead>
 
           <tbody>
-            {rows.map((row) => {
+            {shownRows.map((row) => {
               const device = deviceLabel(row);
               const model = resolveModelName(row.model, row.alias);
+              const nickname = accountNickname(row);
+              const open = expanded === row.id;
+              const rowClass = [
+                styles.row,
+                styles.rowClickable,
+                row.failed ? styles.rowFailed : '',
+                !row.failed && isSlow(row) ? styles.rowSlow : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
               return (
-                <tr key={row.id} className={styles.row}>
-                  <td className={`${styles.keyColumn} ${styles.timeCell}`}>
-                    {formatUsageInstant(row.ts, i18n.language)}
-                  </td>
-                  <td>
-                    <span className={styles.keyText}>
-                      <span className={styles.keyPrimary}>{device.primary}</span>
-                      {device.secondary ? (
-                        <span className={`${styles.keySecondary} ${styles.keyMono}`}>
-                          {device.secondary}
-                        </span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={styles.keyText}>
-                      <span className={styles.keyPrimary}>
-                        {model.primary || t('usage.value_none')}
+                <Fragment key={row.id}>
+                  <tr
+                    className={rowClass}
+                    onClick={() => setExpanded(open ? null : row.id)}
+                    aria-expanded={open}
+                  >
+                    <td className={`${styles.keyColumn} ${styles.timeCell}`}>
+                      {formatUsageInstant(row.ts, i18n.language)}
+                    </td>
+                    <td>
+                      <span className={styles.keyText}>
+                        <span className={styles.keyPrimary}>{device.primary}</span>
+                        {device.secondary ? (
+                          <span className={`${styles.keySecondary} ${styles.keyMono}`}>
+                            {device.secondary}
+                          </span>
+                        ) : null}
                       </span>
-                      {model.secondary ? (
-                        <span className={`${styles.keySecondary} ${styles.keyMono}`}>
-                          {model.secondary}
+                    </td>
+                    <td>
+                      <span className={styles.keyText}>
+                        <span className={styles.keyPrimary}>
+                          {model.primary || t('usage.value_none')}
                         </span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td>{accountLabel(row)}</td>
-                  <td className={styles.flagCell}>
-                    {row.reasoning_effort || t('usage.value_none')}
-                  </td>
-                  <td className={styles.flagCell}>
-                    {t(row.stream ? 'usage.stream_on' : 'usage.stream_off')}
-                  </td>
-                  <td className={row.failed ? styles.statusFail : styles.statusOk}>
-                    <span className={styles.codeCell}>
-                      {t(requestStatusKey(row))}
-                      {row.status_code > 0 ? ` (${row.status_code})` : ''}
-                    </span>
-                  </td>
-                  <td>{formatUsageDuration(row.latency_ms)}</td>
-                  <td>{formatUsageDuration(row.ttft_ms)}</td>
-                  <td>{formatUsageCount(row.input_tokens)}</td>
-                  <td>{formatUsageCount(row.cache_read_tokens)}</td>
-                  <td>{formatUsageCount(row.cache_creation_tokens)}</td>
-                  <td>{formatUsageCount(row.output_tokens)}</td>
-                  <td>{formatUsageCount(row.reasoning_tokens)}</td>
-                  <td>{formatUsageCount(row.total_tokens)}</td>
-                </tr>
+                        {model.secondary ? (
+                          <span className={`${styles.keySecondary} ${styles.keyMono}`}>
+                            {model.secondary}
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className={styles.flagCell}>{speedLabel(row) || t('usage.value_none')}</td>
+                    <td>
+                      <span className={styles.keyText}>
+                        <span className={styles.keyPrimary}>{nickname || accountLabel(row)}</span>
+                        {nickname ? (
+                          <span className={`${styles.keySecondary} ${styles.keyMono}`}>
+                            {accountLabel(row)}
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className={styles.flagCell}>
+                      {row.reasoning_effort || t('usage.value_none')}
+                    </td>
+                    <td className={styles.flagCell}>
+                      {t(row.stream ? 'usage.stream_on' : 'usage.stream_off')}
+                    </td>
+                    <td className={row.failed ? styles.statusFail : styles.statusOk}>
+                      <span className={styles.codeCell}>
+                        {t(requestStatusKey(row))}
+                        {row.status_code > 0 ? ` (${row.status_code})` : ''}
+                      </span>
+                    </td>
+                    <td>{formatUsageDuration(row.latency_ms)}</td>
+                    <td className={isSlow(row) ? styles.slowCell : undefined}>
+                      {formatUsageDuration(row.ttft_ms)}
+                    </td>
+                    <td>{formatUsageCount(row.input_tokens)}</td>
+                    <td>{formatUsageCount(row.cache_read_tokens)}</td>
+                    <td>{formatUsageCount(row.cache_creation_tokens)}</td>
+                    <td>{formatUsageCount(row.output_tokens)}</td>
+                    <td>{formatUsageCount(row.reasoning_tokens)}</td>
+                    <td>{formatUsageCount(row.total_tokens)}</td>
+                  </tr>
+                  {open && (
+                    <tr className={styles.detailRow}>
+                      <td colSpan={16}>
+                        <dl className={styles.detailList}>
+                          <dt>{t('logs.requests_detail_id')}</dt>
+                          <dd>{row.request_id || t('usage.value_none')}</dd>
+                          <dt>{t('usage.detail_endpoint')}</dt>
+                          <dd>{row.endpoint || t('usage.value_none')}</dd>
+                          <dt>{t('usage.detail_credential')}</dt>
+                          <dd>
+                            {[row.auth_id, row.auth_type, row.executor_type]
+                              .filter(Boolean)
+                              .join(' · ') || t('usage.value_none')}
+                          </dd>
+                          <dt>{t('logs.requests_detail_session')}</dt>
+                          <dd>
+                            {row.session_id || t('usage.value_none')}
+                            {row.parent_session_id ? ` ← ${row.parent_session_id}` : ''}
+                          </dd>
+                          <dt>{t('usage.detail_tier')}</dt>
+                          <dd>
+                            {[row.service_tier, row.response_service_tier]
+                              .filter(Boolean)
+                              .join(' → ') || t('usage.value_none')}
+                          </dd>
+                          <dt>{t('usage.detail_client')}</dt>
+                          <dd>
+                            {[row.client_ip, row.user_agent].filter(Boolean).join(' · ') ||
+                              t('usage.value_none')}
+                          </dd>
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
