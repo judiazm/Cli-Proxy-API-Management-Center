@@ -484,6 +484,7 @@
     "idle": "Click here to refresh quota",
     "loading": "Loading quota...",
     "load_failed": "Failed to load quota: {{message}}",
+    "read_throttled": "Anthropic is rate limiting usage reads for this account; next read after {{time}}.",
     "missing_auth_index": "Auth file missing auth_index",
     "empty_windows": "No quota data available",
     "refresh_button": "Refresh Quota",

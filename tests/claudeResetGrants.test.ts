@@ -3,7 +3,14 @@ import {
   selectResetGrant,
 } from '../src/features/quota/providers/claude/selectResetGrant';
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import {
+  claudeReadThrottledUntil,
+  newestClaudeCliUserAgent,
+  noteClaudeReadThrottle,
+  resetClaudeClientState,
+} from '../src/services/api/claudeClient';
+import { usageStoreApi } from '../src/services/api/usageStore';
 import type { AxiosInstance } from 'axios';
 import { apiClient } from '../src/services/api/client';
 import { authFilesApi } from '../src/services/api/authFiles';
@@ -35,7 +42,13 @@ const status = () => parseAnthropicResetGrantStatus(block)!;
 const originalRequest = apiCallApi.request;
 afterEach(() => {
   apiCallApi.request = originalRequest;
+  resetClaudeClientState();
 });
+const seenAgents = (...agents: string[]) =>
+  spyOn(usageStoreApi, 'getRequests').mockResolvedValue({
+    rows: agents.map((user_agent) => ({ user_agent })),
+    next_before: null,
+  } as never);
 
 describe('Claude reset grant fail-closed parsing', () => {
   test('valid block and refusing defaults', () => {
@@ -81,6 +94,7 @@ describe('Claude reset grant fail-closed parsing', () => {
 });
 
 test('exact proxied GET/profile/claim contract, no provider token in frontend', async () => {
+  const agents = seenAgents('claude-cli/2.1.301 (external, cli)');
   const calls: ApiCallRequest[] = [];
   apiCallApi.request = async (request) => {
     calls.push(request);
@@ -109,8 +123,9 @@ test('exact proxied GET/profile/claim contract, no provider token in frontend', 
     expect(call.authIndex).toBe('index');
     expect(call.header?.Authorization).toBe('Bearer $TOKEN$');
     expect(call.header?.['anthropic-beta']).toBe('oauth-2025-04-20');
-    expect(call.header?.['User-Agent']).toBe('claude-cli/2.1.280 (external, cli)');
+    expect(call.header?.['User-Agent']).toBe('claude-cli/2.1.301 (external, cli)');
   }
+  agents.mockRestore();
 });
 
 test('claim terminal mappings and ambiguous outcomes', async () => {
@@ -381,7 +396,8 @@ test('card selection prefers usable recommendation and has deterministic fallbac
   const multiple = { ...base, grants: [b, a], nextGrantId: 'b' };
   expect(selectResetGrant(multiple, 0)?.id).toBe('b');
   expect(selectResetGrant({ ...multiple, nextGrantId: null }, 0)?.id).toBe('a');
-  expect(selectResetGrant({ ...multiple, grants: [a, { ...b, paused: true }] }, 0)?.id).toBe('a');
+  // The recommended grant is the only one offered; another usable grant is not a fallback.
+  expect(selectResetGrant({ ...multiple, grants: [a, { ...b, paused: true }] }, 0)).toBeUndefined();
   expect(selectResetGrant({ ...multiple, eligible: false }, 0)).toBeUndefined();
   expect(selectResetGrant({ ...multiple, atLimit: false }, 0)).toBeUndefined();
   expect(
@@ -450,7 +466,8 @@ test('a 429 status read is reported as throttled, not as a generic read error', 
   expect(error).toBeInstanceOf(AnthropicResetGrantError);
   expect((error as AnthropicResetGrantError).code).toBe('rate_limited');
   apiCallApi.request = async () => ({ statusCode: 500, header: {}, bodyText: '', body: null });
-  const other = await readClaudeResetGrants('a').catch((caught: unknown) => caught);
+  // 'a' is now remembered as throttled, so another account shows the generic error.
+  const other = await readClaudeResetGrants('b').catch((caught: unknown) => caught);
   expect((other as AnthropicResetGrantError).code).toBe('upstream');
 });
 
@@ -560,4 +577,37 @@ test('a cooldown clear pinned to a revision is refused at dispatch after a switc
   } finally {
     instance.defaults.adapter = adapter;
   }
+});
+
+test('the Claude Code version follows real clients within a plausible range', () => {
+  expect(newestClaudeCliUserAgent([])).toBe('claude-cli/2.1.294 (external, cli)');
+  expect(
+    newestClaudeCliUserAgent([
+      'claude-cli/2.1.290 (external, cli)',
+      'claude-cli/2.1.301 (external, sdk-cli)',
+      'claude-cli/2.2.0 (external, cli)',
+      'claude-cli/3.0.1 (external, cli)',
+      'claude-cli/2.1.900 (external, cli)',
+      'python-requests/2.32',
+    ])
+  ).toBe('claude-cli/2.1.301 (external, cli)');
+});
+
+test('a usage-read 429 is remembered for its Retry-After and not asked again', async () => {
+  seenAgents();
+  let calls = 0;
+  apiCallApi.request = async () => {
+    calls++;
+    return { statusCode: 429, body: {}, bodyText: '', header: { 'Retry-After': ['120'] } };
+  };
+  await expect(readClaudeResetGrants('throttled')).rejects.toMatchObject({ code: 'rate_limited' });
+  await expect(readClaudeResetGrants('throttled')).rejects.toMatchObject({ code: 'rate_limited' });
+  expect(calls).toBe(1);
+  const until = claudeReadThrottledUntil('throttled')!;
+  expect(until - Date.now()).toBeGreaterThan(110_000);
+  expect(claudeReadThrottledUntil('throttled', until + 1)).toBeNull();
+  noteClaudeReadThrottle('default', {}, 0);
+  expect(claudeReadThrottledUntil('default', 0)).toBe(5 * 60 * 1000);
+  noteClaudeReadThrottle('capped', { 'retry-after': ['99999'] }, 0);
+  expect(claudeReadThrottledUntil('capped', 0)).toBe(60 * 60 * 1000);
 });

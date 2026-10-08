@@ -482,6 +482,7 @@
     "idle": "點擊此處重新整理配額",
     "loading": "正在載入配額...",
     "load_failed": "配額取得失敗：{{message}}",
+    "read_throttled": "Anthropic 正在限制此帳號的用量讀取；將在 {{time}} 後再次讀取。",
     "missing_auth_index": "驗證檔案缺少 auth_index",
     "empty_windows": "暫無配額資料",
     "refresh_button": "重新整理配額",

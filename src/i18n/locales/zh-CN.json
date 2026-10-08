@@ -482,6 +482,7 @@
     "idle": "点击此处刷新额度",
     "loading": "正在加载额度...",
     "load_failed": "额度获取失败：{{message}}",
+    "read_throttled": "Anthropic 正在限制此账号的用量读取；将在 {{time}} 后再次读取。",
     "missing_auth_index": "认证文件缺少 auth_index",
     "empty_windows": "暂无额度数据",
     "refresh_button": "刷新额度",

@@ -17,9 +17,13 @@ import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import type { ApiCallResult } from '@/services/api/apiCall';
 import { apiClient } from '@/services/api/client';
 import {
+  claudeReadThrottledUntil,
+  claudeRequestHeaders,
+  noteClaudeReadThrottle,
+} from '@/services/api/claudeClient';
+import {
   CLAUDE_PROFILE_URL,
   CLAUDE_USAGE_URL,
-  CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_WINDOW_KEYS,
   claudePeriodHours,
   normalizeNumberValue,
@@ -194,10 +198,11 @@ const readClaudeProfile = async (authIndex: string): Promise<ApiCallResult> => {
     authIndex,
     method: 'GET',
     url: CLAUDE_PROFILE_URL,
-    header: { ...CLAUDE_REQUEST_HEADERS },
+    header: await claudeRequestHeaders(),
   });
   if (result.statusCode >= 200 && result.statusCode < 300)
     profileCache.set(key, { at: Date.now(), result });
+  if (result.statusCode === 429) noteClaudeReadThrottle(authIndex, result.header);
   return result;
 };
 
@@ -208,12 +213,20 @@ const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<Claud
     throw new Error(t('claude_quota.missing_auth_index'));
   }
 
+  const throttledUntil = claudeReadThrottledUntil(authIndex);
+  if (throttledUntil) {
+    throw createStatusError(
+      t('claude_quota.read_throttled', { time: new Date(throttledUntil).toLocaleTimeString() }),
+      429
+    );
+  }
+  const header = await claudeRequestHeaders();
   const [usageResult, profileResult] = await Promise.allSettled([
     apiCallApi.request({
       authIndex,
       method: 'GET',
       url: CLAUDE_USAGE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
+      header,
     }),
     readClaudeProfile(authIndex),
   ]);
@@ -224,6 +237,7 @@ const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<Claud
 
   const result = usageResult.value;
 
+  if (result.statusCode === 429) noteClaudeReadThrottle(authIndex, result.header);
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
   }

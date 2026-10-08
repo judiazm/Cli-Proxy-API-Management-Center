@@ -1,6 +1,10 @@
 // Upstream cedar_ember contract, following opencodex anthropic-reset-grants.
 import { apiCallApi } from './apiCall';
-import { CLAUDE_REQUEST_HEADERS } from '@/utils/quota/constants';
+import {
+  claudeReadThrottledUntil,
+  claudeRequestHeaders,
+  noteClaudeReadThrottle,
+} from './claudeClient';
 
 export const ANTHROPIC_API_ORIGIN = 'https://api.anthropic.com';
 export const ANTHROPIC_RESET_GRANT_PROGRAM = 'cedar_ember';
@@ -236,16 +240,20 @@ export function anthropicResetGrantBlocker(
 }
 
 async function readAccount(authIndex: string, path: string): Promise<Record<string, unknown>> {
+  if (claudeReadThrottledUntil(authIndex)) throw new AnthropicResetGrantError('rate_limited');
   const response = await apiCallApi.request(
     {
       authIndex,
       method: 'GET',
       url: ANTHROPIC_API_ORIGIN + path,
-      header: { ...CLAUDE_REQUEST_HEADERS },
+      header: await claudeRequestHeaders(),
     },
     { timeout: 12000 }
   );
-  if (response.statusCode === 429) throw new AnthropicResetGrantError('rate_limited');
+  if (response.statusCode === 429) {
+    noteClaudeReadThrottle(authIndex, response.header);
+    throw new AnthropicResetGrantError('rate_limited');
+  }
   if (response.statusCode < 200 || response.statusCode >= 300 || !isRecord(response.body)) {
     throw new AnthropicResetGrantError('upstream');
   }
@@ -283,13 +291,14 @@ export async function claimClaudeResetGrantDetailed(
     !ANTHROPIC_RESET_REQUEST_ID_RE.test(requestId)
   )
     throw new AnthropicResetGrantError('malformed');
+  const header = await claudeRequestHeaders();
   try {
     const response = await apiCallApi.request(
       {
         authIndex,
         method: 'POST',
         url: `${ANTHROPIC_API_ORIGIN}/api/organizations/${organization}/reset_rate_limits`,
-        header: { ...CLAUDE_REQUEST_HEADERS },
+        header,
         data: JSON.stringify({
           program: ANTHROPIC_RESET_GRANT_PROGRAM,
           grant_id: grantId,

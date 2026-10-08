@@ -109,8 +109,11 @@ export const CLAUDE_PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile';
 
 export const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 
+/** Claude Code release current on 2026-10-08; claudeRequestHeaders presents newer ones it sees. */
+export const CLAUDE_CLI_BASELINE_VERSION = '2.1.294';
+
 export const CLAUDE_REQUEST_HEADERS = {
-  'User-Agent': 'claude-cli/2.1.280 (external, cli)',
+  'User-Agent': `claude-cli/${CLAUDE_CLI_BASELINE_VERSION} (external, cli)`,
   Authorization: 'Bearer $TOKEN$',
   'Content-Type': 'application/json',
   'anthropic-beta': 'oauth-2025-04-20',

@@ -484,6 +484,7 @@
     "idle": "Nhấn vào đây để làm mới quota",
     "loading": "Đang tải quota...",
     "load_failed": "Không thể tải quota: {{message}}",
+    "read_throttled": "Anthropic đang giới hạn việc đọc mức sử dụng của tài khoản này; lần đọc tiếp theo sau {{time}}.",
     "missing_auth_index": "File xác thực thiếu auth_index",
     "empty_windows": "Chưa có dữ liệu quota",
     "refresh_button": "Làm mới Quota",

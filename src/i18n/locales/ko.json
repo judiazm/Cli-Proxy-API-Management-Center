@@ -484,6 +484,7 @@
     "idle": "할당량을 새로 고치려면 여기를 클릭하세요",
     "loading": "할당량 불러오는 중...",
     "load_failed": "할당량 불러오기 실패: {{message}}",
+    "read_throttled": "Anthropic이 이 계정의 사용량 조회를 제한하고 있습니다. {{time}} 이후에 다시 조회합니다.",
     "missing_auth_index": "인증 파일에 auth_index가 없습니다",
     "empty_windows": "사용 가능한 할당량 데이터가 없습니다",
     "refresh_button": "할당량 새로 고침",

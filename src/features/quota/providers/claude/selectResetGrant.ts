@@ -12,10 +12,10 @@ export function selectResetGrant(status: AnthropicResetGrantStatus, now: number)
       (!grant.startsAt || Date.parse(grant.startsAt) <= now) &&
       (!grant.endsAt || Date.parse(grant.endsAt) > now)
   );
-  return (
-    usable.find((grant) => grant.id === status.nextGrantId) ??
-    usable.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0]
-  );
+  // Anthropic offers only its recommended grant (Claude Code claims nothing else and the claim
+  // answers not_next_grant otherwise); stable ID order applies only when it names none.
+  if (status.nextGrantId) return usable.find((grant) => grant.id === status.nextGrantId);
+  return usable.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
 }
 
 /**
