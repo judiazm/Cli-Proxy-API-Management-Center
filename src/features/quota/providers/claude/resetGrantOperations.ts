@@ -32,7 +32,8 @@ const defaultDependencies = {
     authIndex: string,
     organization: string,
     grantId: string,
-    requestId: string
+    requestId: string,
+    revision?: number
   ) => Promise<ResetClaimAnswer>,
   // A spent reset only helps once the gateway stops routing around the account.
   clearCooldown: async (authIndex: string, revision: number) => {
@@ -147,7 +148,13 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         if (wasRetry && deps.now() - operation.createdAt >= RETRY_WINDOW_MS) {
           throw new Error('expired');
         }
-        const answer = await deps.claim(authIndex, organization, grantId, operation.requestId);
+        const answer = await deps.claim(
+          authIndex,
+          organization,
+          grantId,
+          operation.requestId,
+          session
+        );
         const code = typeof answer === 'string' ? answer : answer.code;
         const reason = typeof answer === 'string' ? null : answer.reason;
         assertSession();

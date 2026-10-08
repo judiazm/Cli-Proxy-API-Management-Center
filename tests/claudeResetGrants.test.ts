@@ -611,3 +611,28 @@ test('a usage-read 429 is remembered for its Retry-After and not asked again', a
   noteClaudeReadThrottle('capped', { 'retry-after': ['99999'] }, 0);
   expect(claudeReadThrottledUntil('capped', 0)).toBe(60 * 60 * 1000);
 });
+
+test('a claim pinned to its connection is not sent after a switch', async () => {
+  seenAgents();
+  const instance = (apiClient as unknown as { instance: AxiosInstance }).instance;
+  const adapter = instance.defaults.adapter;
+  const sent: string[] = [];
+  instance.defaults.adapter = async (config) => {
+    sent.push(String(config.url));
+    return { data: { status_code: 200, body: { result: 'reset' } }, status: 200, statusText: 'OK', headers: {}, config };
+  };
+  try {
+    const revision = apiClient.getConnectionRevision();
+    await expect(
+      claimClaudeResetGrantDetailed('a', organization, grant.id, 'r', revision + 1)
+    ).rejects.toThrow('session');
+    expect(sent).toEqual([]);
+    expect(await claimClaudeResetGrantDetailed('a', organization, grant.id, 'r', revision)).toEqual({
+      code: 'reset',
+      reason: null,
+    });
+    expect(sent).toEqual(['/requests/api-call']);
+  } finally {
+    instance.defaults.adapter = adapter;
+  }
+});

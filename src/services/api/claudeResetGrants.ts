@@ -1,5 +1,7 @@
 // Upstream cedar_ember contract, following opencodex anthropic-reset-grants.
+import type { AxiosRequestConfig } from 'axios';
 import { apiCallApi } from './apiCall';
+import { apiClient } from './client';
 import {
   claudeReadThrottledUntil,
   claudeRequestHeaders,
@@ -283,7 +285,8 @@ export async function claimClaudeResetGrantDetailed(
   authIndex: string,
   organization: string,
   grantId: string,
-  requestId: string
+  requestId: string,
+  revision?: number
 ): Promise<{ code: AnthropicResetSettledCode; reason: string | null }> {
   if (
     !ORGANIZATION_UUID_RE.test(organization) ||
@@ -305,7 +308,14 @@ export async function claimClaudeResetGrantDetailed(
           request_id: requestId,
         }),
       },
-      { timeout: ANTHROPIC_RESET_GRANT_REDEEM_TIMEOUT_MS }
+      // Pinned to the connection the claim started on: the request interceptor refuses it if the
+      // operator switched connections while the headers were being prepared.
+      revision === undefined
+        ? { timeout: ANTHROPIC_RESET_GRANT_REDEEM_TIMEOUT_MS }
+        : ({
+            timeout: ANTHROPIC_RESET_GRANT_REDEEM_TIMEOUT_MS,
+            expectedConnectionRevision: revision,
+          } as AxiosRequestConfig)
     );
     if (response.statusCode === 429) return { code: 'rate_limited', reason: null };
     if (response.statusCode === 401 || response.statusCode === 403)
@@ -325,6 +335,9 @@ export async function claimClaudeResetGrantDetailed(
       };
     }
   } catch {
+    // Refused at dispatch after a connection switch: nothing was sent.
+    if (revision !== undefined && apiClient.getConnectionRevision() !== revision)
+      throw new Error('session');
     /* The proxy may have sent the claim even if the management request failed. */
   }
   throw new AnthropicResetGrantUnknownOutcome();
