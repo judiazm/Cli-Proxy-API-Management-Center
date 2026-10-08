@@ -14,6 +14,8 @@ import type {
   ClaudeUsagePayload,
 } from '@/types';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
+import type { ApiCallResult } from '@/services/api/apiCall';
+import { apiClient } from '@/services/api/client';
 import {
   CLAUDE_PROFILE_URL,
   CLAUDE_USAGE_URL,
@@ -179,6 +181,26 @@ export const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): st
   return null;
 };
 
+// The profile only feeds the plan label and rarely changes. Reading it on every refresh made a
+// third Anthropic call per account, and these OAuth reads are throttled per account.
+const PROFILE_CACHE_MS = 10 * 60 * 1000;
+const profileCache = new Map<string, { at: number; result: ApiCallResult }>();
+
+const readClaudeProfile = async (authIndex: string): Promise<ApiCallResult> => {
+  const key = `${apiClient.getConnectionRevision()}:${authIndex}`;
+  const cached = profileCache.get(key);
+  if (cached && Date.now() - cached.at < PROFILE_CACHE_MS) return cached.result;
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: CLAUDE_PROFILE_URL,
+    header: { ...CLAUDE_REQUEST_HEADERS },
+  });
+  if (result.statusCode >= 200 && result.statusCode < 300)
+    profileCache.set(key, { at: Date.now(), result });
+  return result;
+};
+
 const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<ClaudeQuotaData> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
@@ -193,12 +215,7 @@ const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<Claud
       url: CLAUDE_USAGE_URL,
       header: { ...CLAUDE_REQUEST_HEADERS },
     }),
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CLAUDE_PROFILE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
+    readClaudeProfile(authIndex),
   ]);
 
   if (usageResult.status === 'rejected') {

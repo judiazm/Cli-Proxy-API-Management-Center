@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
   anthropicResetGrantBlocker,
   claimClaudeResetGrant,
+  claimClaudeResetGrantDetailed,
   parseAnthropicResetGrantStatus,
   readClaudeOrganization,
   readClaudeResetGrants,
@@ -19,6 +20,7 @@ import { apiCallApi, type ApiCallRequest } from '../src/services/api/apiCall';
 import {
   createResetGrantOperations,
   RETRY_WINDOW_MS,
+  STATUS_FRESH_MS,
 } from '../src/features/quota/providers/claude/resetGrantOperations';
 
 const organization = '11111111-2222-3333-4444-555555555555';
@@ -237,6 +239,7 @@ test('a retry refusal keeps the ambiguous original operation open', async () => 
   };
   expect(await operations.run('account', 'a', grant.id)).toEqual({
     code: 'rate_limited',
+    reason: null,
     unresolved: true,
     cooldownCleared: false,
   });
@@ -247,6 +250,7 @@ test('a retry refusal keeps the ambiguous original operation open', async () => 
   };
   expect(await operations.run('account', 'a', grant.id)).toEqual({
     code: 'already_used',
+    reason: null,
     unresolved: false,
     cooldownCleared: true,
   });
@@ -259,6 +263,7 @@ test('a spent reset clears the gateway cooldown; a refusal or failed clear does 
   h.deps.claim = async () => 'reset';
   expect(await createResetGrantOperations(h.deps).run('account', 'a', grant.id)).toEqual({
     code: 'reset',
+    reason: null,
     unresolved: false,
     cooldownCleared: true,
   });
@@ -267,6 +272,7 @@ test('a spent reset clears the gateway cooldown; a refusal or failed clear does 
   h.deps.claim = async () => 'not_limited';
   expect(await createResetGrantOperations(h.deps).run('account', 'a', grant.id)).toEqual({
     code: 'not_limited',
+    reason: null,
     unresolved: false,
     cooldownCleared: false,
   });
@@ -279,6 +285,7 @@ test('a spent reset clears the gateway cooldown; a refusal or failed clear does 
   const operations = createResetGrantOperations(h.deps);
   expect(await operations.run('account', 'a', grant.id)).toEqual({
     code: 'reset',
+    reason: null,
     unresolved: false,
     cooldownCleared: false,
   });
@@ -440,4 +447,76 @@ test('a 429 status read is reported as throttled, not as a generic read error', 
   apiCallApi.request = async () => ({ statusCode: 500, header: {}, bodyText: '', body: null });
   const other = await readClaudeResetGrants('a').catch((caught: unknown) => caught);
   expect((other as AnthropicResetGrantError).code).toBe('upstream');
+});
+
+test('a claim answer carries a bounded Anthropic reason', async () => {
+  for (const [body, reason] of [
+    [{ result: 'unavailable', reason: 'not_next_grant' }, 'not_next_grant'],
+    [{ result: 'unavailable', reason: '<b>bad</b>' }, null],
+    [{ result: 'reset' }, null],
+  ] as const) {
+    apiCallApi.request = async () => ({ statusCode: 200, body, bodyText: '', header: {} });
+    expect(await claimClaudeResetGrantDetailed('a', organization, grant.id, 'r')).toEqual({
+      code: body.result,
+      reason,
+    });
+  }
+  const h = setup();
+  h.deps.claim = async () => ({ code: 'unavailable', reason: 'stamp_indeterminate' });
+  expect(await createResetGrantOperations(h.deps).run('account', 'a', grant.id)).toEqual({
+    code: 'unavailable',
+    reason: 'stamp_indeterminate',
+    unresolved: false,
+    cooldownCleared: false,
+  });
+});
+
+test('a fresh row status and a cached organization spare Anthropic reads before the claim', async () => {
+  const h = setup();
+  let statusReads = 0;
+  let profileReads = 0;
+  h.deps.readStatus = async () => {
+    statusReads++;
+    return status();
+  };
+  h.deps.readOrganization = async () => {
+    profileReads++;
+    return organization;
+  };
+  h.deps.claim = async () => 'not_limited';
+  const operations = createResetGrantOperations(h.deps);
+  const fresh = { status: status(), readAt: h.deps.now() - STATUS_FRESH_MS };
+  await operations.run('account', 'a', grant.id, fresh);
+  expect([statusReads, profileReads]).toEqual([0, 1]);
+  const stale = { status: status(), readAt: h.deps.now() - STATUS_FRESH_MS - 1 };
+  await operations.run('account', 'a', grant.id, stale);
+  expect([statusReads, profileReads]).toEqual([1, 1]);
+  // A fresh status that no longer allows spending is still refused before any POST.
+  h.deps.claim = async () => {
+    throw new Error('claim must not be sent');
+  };
+  const spent = { status: { ...status(), eligible: false }, readAt: h.deps.now() };
+  await expect(operations.run('account', 'a', grant.id, spent)).rejects.toThrow('blocked');
+  h.nextSession();
+  h.deps.claim = async () => 'not_limited';
+  await operations.run('account', 'a', grant.id, fresh);
+  expect(profileReads).toBe(2);
+});
+
+test('a throttled read before the claim is reported as throttled and sends nothing', async () => {
+  for (const read of ['readStatus', 'readOrganization'] as const) {
+    const h = setup();
+    let claims = 0;
+    h.deps[read] = async () => {
+      throw new AnthropicResetGrantError('rate_limited');
+    };
+    h.deps.claim = async () => {
+      claims++;
+      return 'reset';
+    };
+    await expect(createResetGrantOperations(h.deps).run('account', 'a', grant.id)).rejects.toThrow(
+      'rate_limited'
+    );
+    expect(claims).toBe(0);
+  }
 });

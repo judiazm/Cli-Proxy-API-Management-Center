@@ -34,6 +34,7 @@ export function useClaudeResetGrants(
   const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
   const key = JSON.stringify([file.name, authIndex]);
   const [status, setStatus] = useState<AnthropicResetGrantStatus | null>(null);
+  const [statusReadAt, setStatusReadAt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
@@ -50,6 +51,7 @@ export function useClaudeResetGrants(
       (result) => {
         if (current()) {
           setStatus(result);
+          setStatusReadAt(Date.now());
           setMessage('');
         }
       },
@@ -100,23 +102,38 @@ export function useClaudeResetGrants(
         lock.current = true;
         setBusy(true);
         try {
-          const answer = await resetGrantOperations.run(key, authIndex, selected);
+          const answer = await resetGrantOperations.run(
+            key,
+            authIndex,
+            selected,
+            status ? { status, readAt: statusReadAt } : undefined
+          );
           if (!current()) return;
           const spent =
             !answer.unresolved && (answer.code === 'reset' || answer.code === 'already_used');
+          // Anthropic's reason says why a claim did not reset, for example `not_next_grant`.
+          const reason =
+            !spent && !answer.unresolved && answer.reason && answer.reason !== answer.code
+              ? ` (${answer.reason})`
+              : '';
           showNotification(
             t(
               spent && !answer.cooldownCleared
                 ? 'claude_reset.cooldown_failed'
                 : `claude_reset.${answer.unresolved ? 'unknown' : answer.code}`
-            ),
+            ) + reason,
             spent && answer.cooldownCleared ? 'success' : 'error'
           );
-        } catch {
+        } catch (error) {
           if (!current()) return;
           const unresolved = resetGrantOperations.inspect(key);
+          const throttled = error instanceof Error && error.message === 'rate_limited';
           showNotification(
-            t(`claude_reset.${unresolved && !unresolved.code ? 'unknown' : 'blocked'}`),
+            t(
+              `claude_reset.${
+                unresolved && !unresolved.code ? 'unknown' : throttled ? 'read_throttled' : 'blocked'
+              }`
+            ),
             'error'
           );
         } finally {

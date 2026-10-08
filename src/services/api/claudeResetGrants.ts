@@ -268,12 +268,15 @@ export async function readClaudeOrganization(authIndex: string) {
   return uuid.toLowerCase();
 }
 
-export async function claimClaudeResetGrant(
+const ANTHROPIC_RESET_REASON_RE = /^[a-z0-9_]{1,40}$/;
+
+/** The claim answer plus Anthropic's `reason`, which says why a claim did not reset. */
+export async function claimClaudeResetGrantDetailed(
   authIndex: string,
   organization: string,
   grantId: string,
   requestId: string
-): Promise<AnthropicResetSettledCode> {
+): Promise<{ code: AnthropicResetSettledCode; reason: string | null }> {
   if (
     !ORGANIZATION_UUID_RE.test(organization) ||
     !ANTHROPIC_RESET_GRANT_ID_RE.test(grantId) ||
@@ -295,8 +298,9 @@ export async function claimClaudeResetGrant(
       },
       { timeout: ANTHROPIC_RESET_GRANT_REDEEM_TIMEOUT_MS }
     );
-    if (response.statusCode === 429) return 'rate_limited';
-    if (response.statusCode === 401 || response.statusCode === 403) return 'auth_error';
+    if (response.statusCode === 429) return { code: 'rate_limited', reason: null };
+    if (response.statusCode === 401 || response.statusCode === 403)
+      return { code: 'auth_error', reason: null };
     const result = isRecord(response.body) ? response.body.result : undefined;
     if (
       response.statusCode >= 200 &&
@@ -304,10 +308,24 @@ export async function claimClaudeResetGrant(
       typeof result === 'string' &&
       (ANTHROPIC_RESET_RESULTS as readonly string[]).includes(result)
     ) {
-      return result as AnthropicResetUpstreamResult;
+      const reason = isRecord(response.body) ? response.body.reason : undefined;
+      return {
+        code: result as AnthropicResetUpstreamResult,
+        reason:
+          typeof reason === 'string' && ANTHROPIC_RESET_REASON_RE.test(reason) ? reason : null,
+      };
     }
   } catch {
     /* The proxy may have sent the claim even if the management request failed. */
   }
   throw new AnthropicResetGrantUnknownOutcome();
+}
+
+export async function claimClaudeResetGrant(
+  authIndex: string,
+  organization: string,
+  grantId: string,
+  requestId: string
+): Promise<AnthropicResetSettledCode> {
+  return (await claimClaudeResetGrantDetailed(authIndex, organization, grantId, requestId)).code;
 }
