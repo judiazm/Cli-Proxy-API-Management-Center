@@ -136,6 +136,7 @@ export function useClaudeResetGrants(
   return {
     count: status?.grants.reduce((sum, grant) => sum + grant.resetsLeft, 0) ?? null,
     expiresAtMs,
+    grants: status?.grants ?? [],
     busy,
     blocked,
     confirm,

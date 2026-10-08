@@ -38,8 +38,9 @@ import {
 } from '@/features/authFiles/constants';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '../providers';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
+import { ClaudeResetGrantDetails } from '../providers/claude/ClaudeResetGrantDetails';
 import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
-import { bindClassMap } from '../types';
+import { bindClassMap, bindQuotaClasses } from '../types';
 import { QUOTA_BAR_CLASS_KEYS, QuotaBar } from './QuotaBar';
 import { QUOTA_COUNTDOWN_CLASS_KEYS, QuotaCountdown } from './QuotaCountdown';
 import bodyStyles from './QuotaBody.module.scss';
@@ -48,6 +49,7 @@ import styles from './QuotaCredentialRow.module.scss';
 const SOURCE = 'QuotaCredentialRow.module.scss';
 const barClasses = bindClassMap(QUOTA_BAR_CLASS_KEYS, styles, SOURCE);
 const countdownClasses = bindClassMap(QUOTA_COUNTDOWN_CLASS_KEYS, styles, SOURCE);
+const quotaClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 
 export interface QuotaCredentialRowProps {
   entry: QuotaFileEntry;
@@ -434,6 +436,16 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
           {t('auth_files.quota_refresh_single')}
         </button>
       </div>
+      {entry.type === 'claude' && claudeReset.grants.some((grant) => grant.resetsLeft > 0) && (
+        <details className={styles.grantDetails}>
+          <summary>{t('claude_reset.expiry_title', { timezone: resolveTimeZoneLabel() })}</summary>
+          <ClaudeResetGrantDetails
+            grants={claudeReset.grants}
+            classes={quotaClasses}
+            showTitle={false}
+          />
+        </details>
+      )}
     </li>
   );
 }

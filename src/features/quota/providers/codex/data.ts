@@ -14,7 +14,8 @@ import type {
   CodexQuotaWindow,
   CodexUsagePayload,
 } from '@/types';
-import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
+import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
+import { guardConfigConnection } from '@/services/api/configValue';
 import {
   CODEX_RATE_LIMIT_RESET_CREDITS_URL,
   CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
@@ -516,7 +517,7 @@ export const parseCodexResetOutcome = (body: unknown): CodexResetOutcome | null 
 const consumeCodexRateLimitResetCredit = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<CodexResetOutcome | null> => {
+): Promise<{ authIndex: string; outcome: CodexResetOutcome | null }> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -538,16 +539,29 @@ const consumeCodexRateLimitResetCredit = async (
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
   }
-  return parseCodexResetOutcome(result.body ?? result.bodyText);
+  return { authIndex, outcome: parseCodexResetOutcome(result.body ?? result.bodyText) };
 };
 
 const resetCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> => {
-  const outcome = await consumeCodexRateLimitResetCredit(file, t);
-  if (outcome === 'reset' || outcome === 'already_redeemed') {
-    return fetchCodexQuota(file, t);
+  const assertConnection = guardConfigConnection();
+  const { authIndex, outcome } = await consumeCodexRateLimitResetCredit(file, t);
+  if (outcome !== 'reset' && outcome !== 'already_redeemed') {
+    // Nothing to reset and no credit leave the credit unspent; anything else is unconfirmed.
+    throw new Error(t(`codex_quota.reset_outcome_${outcome ?? 'unknown'}`));
   }
-  // nothing_to_reset and no_credit leave the credit unspent; anything else is unconfirmed.
-  throw new Error(t(`codex_quota.reset_outcome_${outcome ?? 'unknown'}`));
+  try {
+    // Never clear a different connection's cooldown after awaiting redemption.
+    assertConnection();
+    const result = await authFilesApi.resetCooldown(authIndex);
+    assertConnection();
+    if (result.status !== 'ok' || result.auth_index !== authIndex) {
+      throw new Error('Invalid cooldown reset response');
+    }
+  } catch {
+    // Redemption already succeeded: direct the operator to the existing clear action.
+    throw new Error(t('codex_quota.reset_cooldown_failed'));
+  }
+  return fetchCodexQuota(file, t);
 };
 
 export const CODEX_CONFIG: QuotaProviderData<CodexQuotaState, CodexQuotaData> = {

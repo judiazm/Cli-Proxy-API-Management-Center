@@ -7,7 +7,7 @@ import {
   parseCodexResetOutcome,
 } from '@/features/quota/providers/codex/data';
 import type { CodexQuotaState, CodexUsagePayload } from '@/types';
-import { apiCallApi, type ApiCallRequest, type ApiCallResult } from '@/services/api';
+import { apiCallApi, authFilesApi, type ApiCallRequest, type ApiCallResult } from '@/services/api';
 import {
   CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
   CODEX_RATE_LIMIT_RESET_CREDITS_URL,
@@ -19,6 +19,7 @@ import {
 
 const t = ((key: string) => key) as TFunction;
 const originalApiCallRequest = apiCallApi.request;
+const originalResetCooldown = authFilesApi.resetCooldown;
 
 const result = (statusCode: number, body: unknown = null): ApiCallResult => ({
   statusCode,
@@ -66,6 +67,7 @@ const CURRENT_CODEX_USAGE_PAYLOAD: CodexUsagePayload = {
 
 afterEach(() => {
   apiCallApi.request = originalApiCallRequest;
+  authFilesApi.resetCooldown = originalResetCooldown;
 });
 
 describe('Codex current usage payload', () => {
@@ -233,6 +235,11 @@ describe('Codex reset consume outcomes', () => {
   const file = { name: 'codex.json', type: 'codex', auth_index: 'codex:1' };
   const mockConsume = (consumeBody: unknown) => {
     const urls: string[] = [];
+    authFilesApi.resetCooldown = async (authIndex) => ({
+      status: 'ok',
+      auth_index: authIndex,
+      models: [],
+    });
     apiCallApi.request = async (payload) => {
       urls.push(payload.url);
       if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL) {
