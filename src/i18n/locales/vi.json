@@ -2299,6 +2299,7 @@
     "confirm": "Xác nhận đặt lại",
     "confirm_text": "Tiêu tốn một lượt đặt lại để xóa giới hạn sử dụng đủ điều kiện cho “{{name}}”? Thao tác này sẽ dùng một quyền đặt lại có hạn.",
     "reset": "Đã đặt lại giới hạn sử dụng.",
+    "cooldown_failed": "Quota đã được đặt lại nhưng không thể xóa thời gian chờ của gateway. Trên kết nối ban đầu, hãy dùng chức năng xóa thời gian chờ ở trang tệp xác thực; không sử dụng thêm lượt đặt lại.",
     "already_used": "Quyền này đã được sử dụng.",
     "not_limited": "Không đặt lại: tài khoản hiện không bị giới hạn.",
     "cooldown": "Không đặt lại: đang trong thời gian cooldown.",

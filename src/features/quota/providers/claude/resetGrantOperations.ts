@@ -1,4 +1,5 @@
 import { apiClient } from '@/services/api/client';
+import { authFilesApi } from '@/services/api/authFiles';
 import {
   anthropicResetGrantBlocker,
   claimClaudeResetGrant,
@@ -20,6 +21,11 @@ const defaultDependencies = {
   readStatus: readClaudeResetGrants,
   readOrganization: readClaudeOrganization,
   claim: claimClaudeResetGrant,
+  // A spent reset only helps once the gateway stops routing around the account.
+  clearCooldown: async (authIndex: string) => {
+    const result = await authFilesApi.resetCooldown(authIndex);
+    return result.status === 'ok' && result.auth_index === authIndex;
+  },
   now: () => Date.now(),
   requestId: () => crypto.randomUUID() as string,
 };
@@ -90,7 +96,17 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         assertSession();
         // A refusal on a retry cannot prove that the earlier ambiguous POST did not spend.
         if (!wasRetry || code === 'reset' || code === 'already_used') operation.code = code;
-        return { code, unresolved: !operation.code };
+        let cooldownCleared = false;
+        if (code === 'reset' || code === 'already_used') {
+          try {
+            // Never clear a replacement connection's cooldown after awaiting the claim.
+            assertSession();
+            cooldownCleared = await deps.clearCooldown(authIndex);
+          } catch {
+            cooldownCleared = false;
+          }
+        }
+        return { code, unresolved: !operation.code, cooldownCleared };
       } finally {
         if (deps.revision() === session) busy.delete(key);
       }

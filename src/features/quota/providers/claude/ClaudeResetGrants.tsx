@@ -102,11 +102,15 @@ export function useClaudeResetGrants(
         try {
           const answer = await resetGrantOperations.run(key, authIndex, selected);
           if (!current()) return;
+          const spent =
+            !answer.unresolved && (answer.code === 'reset' || answer.code === 'already_used');
           showNotification(
-            t(`claude_reset.${answer.unresolved ? 'unknown' : answer.code}`),
-            !answer.unresolved && (answer.code === 'reset' || answer.code === 'already_used')
-              ? 'success'
-              : 'error'
+            t(
+              spent && !answer.cooldownCleared
+                ? 'claude_reset.cooldown_failed'
+                : `claude_reset.${answer.unresolved ? 'unknown' : answer.code}`
+            ),
+            spent && answer.cooldownCleared ? 'success' : 'error'
           );
         } catch {
           if (!current()) return;

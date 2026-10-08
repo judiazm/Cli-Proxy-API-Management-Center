@@ -148,6 +148,7 @@ function setup() {
   let now = 100;
   let count = 0;
   const ids: string[] = [];
+  const cleared: string[] = [];
   const deps = {
     revision: () => revision,
     now: () => now,
@@ -163,10 +164,15 @@ function setup() {
       ids.push(id);
       throw new AnthropicResetGrantUnknownOutcome();
     },
+    clearCooldown: async (authIndex: string) => {
+      cleared.push(authIndex);
+      return true;
+    },
   };
   return {
     deps,
     ids,
+    cleared,
     nextSession: () => {
       revision++;
     },
@@ -232,6 +238,7 @@ test('a retry refusal keeps the ambiguous original operation open', async () => 
   expect(await operations.run('account', 'a', grant.id)).toEqual({
     code: 'rate_limited',
     unresolved: true,
+    cooldownCleared: false,
   });
   expect(operations.inspect('account')?.code).toBeUndefined();
   h.deps.claim = async (_auth, _org, _grant, id) => {
@@ -241,8 +248,41 @@ test('a retry refusal keeps the ambiguous original operation open', async () => 
   expect(await operations.run('account', 'a', grant.id)).toEqual({
     code: 'already_used',
     unresolved: false,
+    cooldownCleared: true,
   });
   expect(h.ids).toEqual(['request-1', 'request-1', 'request-1']);
+  expect(h.cleared).toEqual(['a']);
+});
+
+test('a spent reset clears the gateway cooldown; a refusal or failed clear does not claim it', async () => {
+  const h = setup();
+  h.deps.claim = async () => 'reset';
+  expect(await createResetGrantOperations(h.deps).run('account', 'a', grant.id)).toEqual({
+    code: 'reset',
+    unresolved: false,
+    cooldownCleared: true,
+  });
+  expect(h.cleared).toEqual(['a']);
+
+  h.deps.claim = async () => 'not_limited';
+  expect(await createResetGrantOperations(h.deps).run('account', 'a', grant.id)).toEqual({
+    code: 'not_limited',
+    unresolved: false,
+    cooldownCleared: false,
+  });
+  expect(h.cleared).toEqual(['a']);
+
+  h.deps.claim = async () => 'reset';
+  h.deps.clearCooldown = async () => {
+    throw new Error('offline');
+  };
+  const operations = createResetGrantOperations(h.deps);
+  expect(await operations.run('account', 'a', grant.id)).toEqual({
+    code: 'reset',
+    unresolved: false,
+    cooldownCleared: false,
+  });
+  expect(operations.inspect('account')?.code).toBe('reset');
 });
 
 test('no retry after the deadline expires during profile lookup', async () => {
@@ -295,6 +335,7 @@ test('a stale claim answer cannot settle the replacement session operation', asy
   };
   await expect(operations.run('account', 'a', grant.id)).rejects.toThrow('session');
   expect(operations.inspect('account')).toBeUndefined();
+  expect(h.cleared).toEqual([]);
 });
 
 test('all grant messages and confirmation are translated in four locales', async () => {
