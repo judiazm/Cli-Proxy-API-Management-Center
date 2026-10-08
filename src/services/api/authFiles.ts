@@ -2,6 +2,7 @@
  * 认证文件与 OAuth 排除模型相关 API
  */
 
+import type { AxiosRequestConfig } from 'axios';
 import { apiClient } from './client';
 import { getConfigValue, guardConfigConnection } from './configValue';
 import { isRecord } from '@/utils/helpers';
@@ -556,10 +557,17 @@ export const authFilesApi = {
     return normalizeAuthFileRefreshResults(response);
   },
 
-  resetCooldown: (authIndex: string) =>
-    apiClient.post<AuthFileCooldownResetResponse>('/routing/cooldown/reset', {
-      auth_index: authIndex,
-    }),
+  /** With `expectedRevision`, the clear is sent only on that management connection. */
+  resetCooldown: (authIndex: string, expectedRevision?: number) =>
+    expectedRevision === undefined
+      ? apiClient.post<AuthFileCooldownResetResponse>('/routing/cooldown/reset', {
+          auth_index: authIndex,
+        })
+      : apiClient.post<AuthFileCooldownResetResponse>(
+          '/routing/cooldown/reset',
+          { auth_index: authIndex },
+          { expectedConnectionRevision: expectedRevision } as AxiosRequestConfig
+        ),
 
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);

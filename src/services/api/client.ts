@@ -114,6 +114,13 @@ class ApiClient {
     // 请求拦截器
     this.instance.interceptors.request.use(
       (config) => {
+        // A request pinned to the connection it started on is refused here, where the base URL
+        // and key are read, if the operator switched connections while it was being prepared.
+        const expected = (config as { expectedConnectionRevision?: number })
+          .expectedConnectionRevision;
+        if (expected !== undefined && expected !== this.connectionRevision) {
+          throw new Error('connection changed before dispatch');
+        }
         // 设置 baseURL
         config.baseURL = this.apiBase;
 

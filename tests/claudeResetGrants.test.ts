@@ -4,6 +4,9 @@ import {
 } from '../src/features/quota/providers/claude/selectResetGrant';
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import type { AxiosInstance } from 'axios';
+import { apiClient } from '../src/services/api/client';
+import { authFilesApi } from '../src/services/api/authFiles';
 import {
   anthropicResetGrantBlocker,
   claimClaudeResetGrant,
@@ -14,11 +17,13 @@ import {
   AnthropicResetGrantError,
   AnthropicResetGrantUnknownOutcome,
   ANTHROPIC_RESET_RESULTS,
+  ANTHROPIC_RESET_REQUEST_ID_RE,
   type AnthropicResetSettledCode,
 } from '../src/services/api/claudeResetGrants';
 import { apiCallApi, type ApiCallRequest } from '../src/services/api/apiCall';
 import {
   createResetGrantOperations,
+  createResetRequestId,
   RETRY_WINDOW_MS,
   STATUS_FRESH_MS,
 } from '../src/features/quota/providers/claude/resetGrantOperations';
@@ -518,5 +523,41 @@ test('a throttled read before the claim is reported as throttled and sends nothi
       'rate_limited'
     );
     expect(claims).toBe(0);
+  }
+});
+
+test('request ids do not need randomUUID, which plain-HTTP pages lack', async () => {
+  const insecure = {
+    getRandomValues: (bytes: Uint8Array) => bytes.fill(0xab),
+  } as unknown as Crypto;
+  const id = createResetRequestId(insecure);
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(id).toMatch(ANTHROPIC_RESET_REQUEST_ID_RE);
+  const secure = { randomUUID: () => 'from-random-uuid' } as unknown as Crypto;
+  expect(createResetRequestId(secure)).toBe('from-random-uuid');
+});
+
+test('a cooldown clear pinned to a revision is refused at dispatch after a switch', async () => {
+  const instance = (apiClient as unknown as { instance: AxiosInstance }).instance;
+  const adapter = instance.defaults.adapter;
+  const sent: string[] = [];
+  instance.defaults.adapter = async (config) => {
+    sent.push(String(config.url));
+    return {
+      data: { status: 'ok', auth_index: 'a', models: [] },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    };
+  };
+  try {
+    const revision = apiClient.getConnectionRevision();
+    await expect(authFilesApi.resetCooldown('a', revision + 1)).rejects.toThrow();
+    expect(sent).toEqual([]);
+    expect(await authFilesApi.resetCooldown('a', revision)).toMatchObject({ status: 'ok' });
+    expect(sent).toEqual(['/routing/cooldown/reset']);
+  } finally {
+    instance.defaults.adapter = adapter;
   }
 });

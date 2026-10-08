@@ -35,13 +35,27 @@ const defaultDependencies = {
     requestId: string
   ) => Promise<ResetClaimAnswer>,
   // A spent reset only helps once the gateway stops routing around the account.
-  clearCooldown: async (authIndex: string) => {
-    const result = await authFilesApi.resetCooldown(authIndex);
+  clearCooldown: async (authIndex: string, revision: number) => {
+    const result = await authFilesApi.resetCooldown(authIndex, revision);
     return result.status === 'ok' && result.auth_index === authIndex;
   },
   now: () => Date.now(),
-  requestId: () => crypto.randomUUID() as string,
+  requestId: () => createResetRequestId(),
 };
+
+/**
+ * crypto.randomUUID exists only in secure contexts. The dashboard is opened over plain HTTP on
+ * the tailnet, where calling it threw before any claim was sent (three refused clicks on
+ * 2026-10-07). getRandomValues is available everywhere.
+ */
+export function createResetRequestId(cryptoImpl: Crypto = globalThis.crypto): string {
+  if (typeof cryptoImpl.randomUUID === 'function') return cryptoImpl.randomUUID();
+  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /** Tab-memory journal: survives dialog/card unmounts, never crosses connections.
  * No automatic retry. Expired ambiguous operations stay blocked until session end.
@@ -144,7 +158,7 @@ export function createResetGrantOperations(deps = defaultDependencies) {
           try {
             // Never clear a replacement connection's cooldown after awaiting the claim.
             assertSession();
-            cooldownCleared = await deps.clearCooldown(authIndex);
+            cooldownCleared = await deps.clearCooldown(authIndex, session);
           } catch {
             cooldownCleared = false;
           }
