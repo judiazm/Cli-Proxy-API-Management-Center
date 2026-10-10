@@ -85,6 +85,7 @@ const BINDING_PREFERENCE: Record<QuotaProviderFamily, readonly string[]> = {
     'antigravity_quota.five_hour_limit',
   ],
   kimi: [],
+  plugin: [],
 };
 
 /**

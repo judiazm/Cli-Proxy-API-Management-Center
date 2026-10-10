@@ -21,6 +21,7 @@ import type {
   DevinQuotaState,
   KimiQuotaState,
   MetaQuotaState,
+  PluginQuotaState,
   XaiBillingSummary,
   XaiQuotaState,
 } from '@/types';
@@ -36,13 +37,7 @@ import { clampPercent, remainingFromUsed } from './tone';
  * `QuotaProviderType` is an alias of it.
  */
 export type QuotaProviderFamily =
-  | 'antigravity'
-  | 'claude'
-  | 'codex'
-  | 'devin'
-  | 'kimi'
-  | 'meta'
-  | 'xai';
+  'antigravity' | 'claude' | 'codex' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
 
 /** Column key for the manual-reset ledger, which is not a usage window. */
 export const MANUAL_RESETS_COLUMN_ID = '__manual_resets__';
@@ -82,7 +77,8 @@ export interface QuotaPlanBadge {
 }
 
 export interface QuotaRowNote {
-  labelKey: string;
+  labelKey?: string;
+  label?: string;
   value?: string;
   valueKey?: string;
 }
@@ -309,7 +305,10 @@ const buildCodexModel = (quota: CodexQuotaState): QuotaCredentialRowModel => {
     notes.push({ labelKey: 'codex_quota.speed_label', valueKey: 'codex_quota.ultrafast' });
   }
   if (quota.creditsUnlimited) {
-    notes.push({ labelKey: 'codex_quota.credit_balance_label', valueKey: 'codex_quota.credit_unlimited' });
+    notes.push({
+      labelKey: 'codex_quota.credit_balance_label',
+      valueKey: 'codex_quota.credit_unlimited',
+    });
   } else if (quota.creditBalance && Number(quota.creditBalance) > 0) {
     notes.push({
       labelKey: 'codex_quota.credit_balance_label',
@@ -334,7 +333,9 @@ const buildCodexModel = (quota: CodexQuotaState): QuotaCredentialRowModel => {
   const hasWeekly = (quota.windows ?? []).some((w) => w.id === 'weekly' || w.id === 'monthly');
   const hasFiveHour = (quota.windows ?? []).some((w) => w.id === 'five-hour');
   const absentLabelKeys: Record<string, string> =
-    hasWeekly && !hasFiveHour ? { 'codex_quota.primary_window': 'codex_quota.no_five_hour_limit' } : {};
+    hasWeekly && !hasFiveHour
+      ? { 'codex_quota.primary_window': 'codex_quota.no_five_hour_limit' }
+      : {};
 
   return {
     ...EMPTY_MODEL,
@@ -430,9 +431,7 @@ const buildMetaModel = (quota: MetaQuotaState): QuotaCredentialRowModel => {
       ? []
       : [
           {
-            labelKey: quota.data.isSubscriptionActive
-              ? 'meta_quota.active'
-              : 'meta_quota.inactive',
+            labelKey: quota.data.isSubscriptionActive ? 'meta_quota.active' : 'meta_quota.inactive',
           },
         ];
 
@@ -563,6 +562,40 @@ const buildAntigravityModel = (quota: AntigravityQuotaState): QuotaCredentialRow
   };
 };
 
+/** Backend-declared quota providers use the same bucket shape as Antigravity. */
+const buildPluginModel = (quota: PluginQuotaState): QuotaCredentialRowModel => {
+  const plan =
+    quota.subscription?.tierName || quota.subscription?.plan || quota.subscription?.tierId;
+  const notes: QuotaRowNote[] = quota.summary.map((metric) => {
+    const value =
+      metric.format === 'currency' && metric.currency
+        ? new Intl.NumberFormat(undefined, { style: 'currency', currency: metric.currency }).format(
+            metric.value
+          )
+        : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(metric.value);
+    return { label: metric.label, value: metric.unit ? `${value} ${metric.unit}` : value };
+  });
+  const windows = quota.groups.flatMap((group) =>
+    group.buckets.map<QuotaWindowCell>((bucket) => ({
+      columnId: `plugin|${group.id}|${bucket.id}`,
+      label: `${group.label} · ${bucket.label}`,
+      remainingPercent: clampPercent(bucket.remainingFraction * 100),
+      resetLabel: normalizeResetLabel(bucket.resetTime),
+      resetAtMs: bucket.resetAtMs ?? null,
+      description: bucket.description ?? group.description,
+      periodHours: bucket.periodHours ?? null,
+    }))
+  );
+  return {
+    ...EMPTY_MODEL,
+    plan: plan ? { text: plan, tier: 'plain' } : null,
+    notes,
+    windows,
+    messageKey:
+      windows.length === 0 && !plan && notes.length === 0 ? 'plugin_quota.empty_data' : null,
+  };
+};
+
 /**
  * Flatten one credential's loaded quota. Returns null for anything that is not
  * a settled success — idle, loading and error rows render their own state and
@@ -590,6 +623,8 @@ export function buildQuotaRowModel(
       return buildXaiModel(quota as XaiQuotaState);
     case 'antigravity':
       return buildAntigravityModel(quota as AntigravityQuotaState);
+    case 'plugin':
+      return buildPluginModel(quota as PluginQuotaState);
     default:
       return null;
   }

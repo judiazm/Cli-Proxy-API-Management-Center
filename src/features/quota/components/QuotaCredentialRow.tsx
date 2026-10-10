@@ -117,8 +117,14 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
 
   const status = quota?.status ?? 'idle';
   const loading = status === 'loading';
-  const iconSrc = getAuthFileIcon(entry.type, resolvedTheme);
-  const typeLabel = getTypeLabel(t, entry.type);
+  const providerType =
+    entry.type === 'plugin'
+      ? String(
+          file.quotaProvider ?? file['quota_provider'] ?? file.provider ?? file.type ?? 'plugin'
+        )
+      : entry.type;
+  const iconSrc = getAuthFileIcon(providerType, resolvedTheme);
+  const typeLabel = getTypeLabel(t, providerType);
   const displayName = displayCredentialLabel(getQuotaDisplayName(file), file.note, showEmails);
   const claudeReset = useClaudeResetGrants(
     file,
@@ -325,7 +331,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
           className={styles.iconWrap}
           title={typeLabel}
           style={
-            isThemeSurfaceIconProvider(entry.type)
+            isThemeSurfaceIconProvider(providerType)
               ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
               : undefined
           }
@@ -376,9 +382,11 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
                   />
                 </span>
               )}
-              {model?.notes.map((note) => (
-                <span key={note.labelKey} className={styles.note}>
-                  <span className={styles.noteLabel}>{t(note.labelKey)}</span>
+              {model?.notes.map((note, index) => (
+                <span key={`${note.labelKey ?? note.label}-${index}`} className={styles.note}>
+                  <span className={styles.noteLabel}>
+                    {note.labelKey ? t(note.labelKey) : note.label}
+                  </span>
                   <span className={styles.noteValue}>
                     {note.valueKey ? t(note.valueKey) : note.value}
                   </span>

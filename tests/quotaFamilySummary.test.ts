@@ -16,7 +16,7 @@ import {
   type QuotaFamilyMember,
   type QuotaProviderFamily,
 } from '@/utils/quota';
-import type { ClaudeQuotaState, CodexQuotaState, DevinQuotaState } from '@/types';
+import type { ClaudeQuotaState, CodexQuotaState, DevinQuotaState, PluginQuotaState } from '@/types';
 import { DAY_MS } from '@/utils/time/durations';
 
 const NOW = Date.UTC(2026, 8, 13, 12, 0, 0);
@@ -59,11 +59,7 @@ const claudeCredential = (
   ],
 });
 
-const memberOf = (
-  key: string,
-  state: unknown,
-  family: QuotaProviderFamily
-): QuotaFamilyMember => ({
+const memberOf = (key: string, state: unknown, family: QuotaProviderFamily): QuotaFamilyMember => ({
   key,
   model: buildQuotaRowModel(family, state),
 });
@@ -200,7 +196,50 @@ describe('buildQuotaColumns', () => {
       'devin_quota.weekly',
       'devin_quota.daily',
     ]);
-    expect(buildQuotaFamilySummary('devin', [member], NOW).binding?.totalRemainingPercent).toBe(
+    expect(buildQuotaFamilySummary('devin', [member], NOW).binding?.totalRemainingPercent).toBe(80);
+  });
+
+  test('keeps plugin buckets and numeric summaries in the compact layout', () => {
+    const plugin: PluginQuotaState = {
+      status: 'success',
+      subscription: { plan: null, tierName: 'Kiro Pro', tierId: null },
+      summary: [
+        { key: 'credits', label: 'Credits used', value: 1740.28, unit: 'credits' },
+        { key: 'charged', label: 'Charged', value: 29.61, format: 'currency', currency: 'USD' },
+      ],
+      groups: [
+        {
+          id: 'standard',
+          label: 'Standard',
+          buckets: [
+            { id: 'monthly', label: 'Monthly', remainingFraction: 0.8, resetAtMs: NOW + DAY_MS },
+          ],
+        },
+        {
+          id: 'premium',
+          label: 'Premium',
+          buckets: [
+            {
+              id: 'monthly',
+              label: 'Monthly',
+              remainingFraction: 0.2,
+              resetAtMs: NOW + 2 * DAY_MS,
+            },
+          ],
+        },
+      ],
+    };
+    const member = memberOf('kiro', plugin, 'plugin');
+
+    expect(member.model?.plan).toEqual({ text: 'Kiro Pro', tier: 'plain' });
+    expect(member.model?.notes.map((note) => note.label)).toEqual(['Credits used', 'Charged']);
+    expect(member.model?.notes[0]?.value).toContain('1,740.28 credits');
+    expect(member.model?.notes[1]?.value).toContain('29.61');
+    expect(buildQuotaColumns('plugin', [member]).map((column) => column.columnId)).toEqual([
+      'plugin|standard|monthly',
+      'plugin|premium|monthly',
+    ]);
+    expect(buildQuotaFamilySummary('plugin', [member], NOW).binding?.totalRemainingPercent).toBe(
       80
     );
   });
