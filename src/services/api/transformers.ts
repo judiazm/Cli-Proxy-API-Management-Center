@@ -361,10 +361,7 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   config.apiKeys = Array.isArray(keys)
     ? keys.map((key) => typeof key === 'string' ? key : isRecord(key) ? key['api-key'] : '').filter((key): key is string => typeof key === 'string' && key.trim() !== '')
     : [];
-  const quota = at('quota-exceeded');
   config.quotaExceeded = {
-    switchProject: isRecord(quota) ? normalizeBoolean(quota['switch-project']) : false,
-    switchPreviewModel: isRecord(quota) ? normalizeBoolean(quota['switch-preview-model']) : false,
     antigravityCredits:
       normalizeBoolean(at('oauth.providers.antigravity.antigravity-credits')) ?? false,
   };
