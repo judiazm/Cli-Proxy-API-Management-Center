@@ -87,6 +87,25 @@ const devinCredential = (): DevinQuotaState => ({
 });
 
 describe('buildQuotaColumns', () => {
+  test('keeps retained Claude windows visible without counting them as live capacity', () => {
+    const retained: ClaudeQuotaState = {
+      ...claudeCredential(58, 79, NOW + DAY_MS),
+      status: 'error',
+      stale: true,
+      observedAt: new Date(NOW).toISOString(),
+    };
+    const member = memberOf('stale', retained, 'claude');
+    expect(member.model?.stale).toBe(true);
+    expect(buildQuotaColumns('claude', [member]).map((column) => column.columnId)).toContain(
+      'claude_quota.seven_day'
+    );
+    const summary = buildQuotaFamilySummary('claude', [member], NOW);
+    expect(summary.binding?.readingCount).toBe(0);
+    expect(summary.binding?.totalRemainingPercent).toBeNull();
+    expect(summary.bars).toEqual([null]);
+    expect(summary.soonestResetAtMs).toBeNull();
+  });
+
   test('leads with the binding window, then first-seen order', () => {
     const members = [
       memberOf('a', claudeCredential(58, 79, NOW + DAY_MS), 'claude'),

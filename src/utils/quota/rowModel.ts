@@ -81,6 +81,7 @@ export interface QuotaRowNote {
   label?: string;
   value?: string;
   valueKey?: string;
+  valueParams?: Record<string, string | number>;
 }
 
 export interface QuotaManualResetCredit {
@@ -102,6 +103,8 @@ export interface QuotaManualResets {
 }
 
 export interface QuotaCredentialRowModel {
+  /** Retained provider data from a loading or failed read; never count it as live capacity. */
+  stale?: boolean;
   plan: QuotaPlanBadge | null;
   /** Subscription renewal — a billing date, never a capacity reset. */
   renewal: { labelKey: string; label: string; atMs: number | null } | null;
@@ -246,10 +249,28 @@ const formatRemainingAmount = (capCents: number | null, usedCents: number | null
 const buildClaudeModel = (quota: ClaudeQuotaState): QuotaCredentialRowModel => {
   const extraUsage = quota.extraUsage ?? null;
   const notes: QuotaRowNote[] = [];
-  if (extraUsage?.is_enabled) {
+  if (
+    extraUsage?.isEnabled &&
+    extraUsage.usedCredits !== null &&
+    extraUsage.monthlyLimit !== null
+  ) {
     notes.push({
       labelKey: 'claude_quota.extra_usage_label',
-      value: `$${(extraUsage.used_credits / 100).toFixed(2)} / $${(extraUsage.monthly_limit / 100).toFixed(2)}`,
+      value: `$${(extraUsage.usedCredits / 100).toFixed(2)} / $${(extraUsage.monthlyLimit / 100).toFixed(2)}`,
+    });
+  }
+  for (const balance of quota.dollarWindows ?? []) {
+    notes.push({
+      label: balance.key,
+      valueKey: 'claude_quota.dollar_balance_remaining',
+      valueParams: {
+        amount:
+          balance.remainingDollars === null
+            ? '--'
+            : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(
+                balance.remainingDollars
+              ),
+      },
     });
   }
 
@@ -265,10 +286,14 @@ const buildClaudeModel = (quota: ClaudeQuotaState): QuotaCredentialRowModel => {
 
   return {
     ...EMPTY_MODEL,
+    stale: quota.status !== 'success' || quota.stale === true,
     plan: quota.planType ? { labelKey: `claude_quota.${quota.planType}`, tier: 'plain' } : null,
     notes,
     windows,
-    messageKey: windows.length === 0 ? 'claude_quota.empty_windows' : null,
+    messageKey:
+      windows.length === 0 && !extraUsage && !quota.dollarWindows?.length
+        ? 'claude_quota.empty_windows'
+        : null,
   };
 };
 
@@ -597,16 +622,28 @@ const buildPluginModel = (quota: PluginQuotaState): QuotaCredentialRowModel => {
 };
 
 /**
- * Flatten one credential's loaded quota. Returns null for anything that is not
- * a settled success — idle, loading and error rows render their own state and
- * have no cells to place.
+ * Flatten one credential's loaded quota. Claude keeps observed data visible
+ * during a refresh or failed read, flagged stale so summaries can exclude it.
  */
 export function buildQuotaRowModel(
   family: QuotaProviderFamily,
   quota: unknown
 ): QuotaCredentialRowModel | null {
   const state = quota as { status?: string } | undefined;
-  if (!state || state.status !== 'success') return null;
+  if (!state) return null;
+  if (state.status !== 'success') {
+    const claude = quota as ClaudeQuotaState;
+    const retainedClaude =
+      family === 'claude' &&
+      (state.status === 'loading' || state.status === 'error') &&
+      Boolean(
+        claude.observedAt ||
+        claude.windows?.length ||
+        claude.extraUsage ||
+        claude.dollarWindows?.length
+      );
+    if (!retainedClaude) return null;
+  }
 
   switch (family) {
     case 'claude':

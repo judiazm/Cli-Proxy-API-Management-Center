@@ -32,7 +32,7 @@ export interface QuotaColumn {
 export interface QuotaFamilyMember {
   /** Unique within the family — the credential's file name. */
   key: string;
-  /** Null until the credential has been loaded successfully. */
+  /** Null until loaded; retained Claude readings are flagged stale in the model. */
   model: QuotaCredentialRowModel | null;
 }
 
@@ -102,6 +102,7 @@ const remainingShare = (members: readonly QuotaFamilyMember[], columnId: string)
   let total = 0;
   let count = 0;
   for (const member of members) {
+    if (member.model?.stale) continue;
     const cell = member.model?.windows.find((window) => window.columnId === columnId);
     if (cell?.remainingPercent === null || cell?.remainingPercent === undefined) continue;
     total += cell.remainingPercent;
@@ -215,6 +216,7 @@ const aggregate = (
   let total = 0;
   let readingCount = 0;
   for (const member of members) {
+    if (member.model?.stale) continue;
     const cell = findCell(member.model, column.columnId);
     if (cell?.remainingPercent === null || cell?.remainingPercent === undefined) continue;
     total += cell.remainingPercent;
@@ -246,6 +248,7 @@ export function buildQuotaFamilySummary(
 
   let soonestResetAtMs: number | null = null;
   const bars: (number | null)[] = members.map((member) => {
+    if (member.model?.stale) return null;
     const cell = bindingColumn ? findCell(member.model, bindingColumn.columnId) : null;
     const atMs = cell?.resetAtMs ?? null;
     if (atMs !== null && atMs > nowMs && (soonestResetAtMs === null || atMs < soonestResetAtMs)) {

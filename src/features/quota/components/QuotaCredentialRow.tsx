@@ -17,7 +17,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { IconRefreshCw } from '@/components/ui/icons';
-import type { ResolvedTheme } from '@/types';
+import type { ClaudeQuotaState, ResolvedTheme } from '@/types';
 import {
   MANUAL_RESETS_COLUMN_ID,
   displayCredentialLabel,
@@ -54,7 +54,7 @@ const quotaClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 export interface QuotaCredentialRowProps {
   entry: QuotaFileEntry;
   quota?: QuotaCardState;
-  /** Flattened cells; null unless the credential loaded successfully. */
+  /** Flattened cells, including retained Claude readings after a failed refresh. */
   model: QuotaCredentialRowModel | null;
   /** The family's column order — identical for every row in the section. */
   columns: QuotaColumn[];
@@ -117,6 +117,10 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
 
   const status = quota?.status ?? 'idle';
   const loading = status === 'loading';
+  const retainedClaudeUsage = entry.type === 'claude' && model?.stale === true;
+  const claudeObservedAt = retainedClaudeUsage
+    ? (quota as ClaudeQuotaState | undefined)?.observedAt
+    : null;
   const providerType =
     entry.type === 'plugin'
       ? String(
@@ -290,7 +294,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
         </button>
       );
     }
-    if (loading) {
+    if (loading && !retainedClaudeUsage) {
       return (
         <div
           className={styles.loadingCell}
@@ -303,7 +307,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
         </div>
       );
     }
-    if (status === 'error') {
+    if (status === 'error' && !retainedClaudeUsage) {
       return (
         <div className={styles.errorCell} style={{ gridColumn: `span ${trackCount}` }} role="alert">
           {t(`${adapter.i18nPrefix}.load_failed`, { message: errorMessage })}
@@ -317,10 +321,31 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
         </div>
       );
     }
-    return columns.map((column) =>
+    const cells = columns.map((column) =>
       column.columnId === MANUAL_RESETS_COLUMN_ID
         ? renderManualResetsCell(column)
         : renderWindowCell(column)
+    );
+    if (!retainedClaudeUsage) return cells;
+    return (
+      <>
+        <div
+          className={loading ? styles.loadingCell : styles.errorCell}
+          style={{ gridColumn: `span ${trackCount}` }}
+          role={loading ? 'status' : 'alert'}
+          aria-busy={loading || undefined}
+        >
+          {loading
+            ? t(`${adapter.i18nPrefix}.loading`)
+            : `${t(`${adapter.i18nPrefix}.load_failed`, { message: errorMessage })} ${t(
+                'claude_quota.stale_snapshot',
+                {
+                  time: claudeObservedAt ? new Date(claudeObservedAt).toLocaleString(locale) : '--',
+                }
+              )}`}
+        </div>
+        {cells}
+      </>
     );
   };
 
@@ -388,7 +413,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
                     {note.labelKey ? t(note.labelKey) : note.label}
                   </span>
                   <span className={styles.noteValue}>
-                    {note.valueKey ? t(note.valueKey) : note.value}
+                    {note.valueKey ? t(note.valueKey, note.valueParams) : note.value}
                   </span>
                 </span>
               ))}
