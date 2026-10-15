@@ -6,13 +6,13 @@ import { useNotificationStore } from '@/stores';
 import { apiClient } from '@/services/api/client';
 import {
   AnthropicResetGrantError,
-  readClaudeResetGrants,
   type AnthropicResetGrantStatus,
 } from '@/services/api/claudeResetGrants';
 import type { AuthFileItem } from '@/types';
 import { normalizeAuthIndex } from '@/utils/quota';
 import { resetGrantOperations, RETRY_WINDOW_MS } from './resetGrantOperations';
 import { describeResetGrantState, selectResetGrant } from './selectResetGrant';
+import { readResetGrantsForCard, scheduleResetGrantRead } from './resetGrantReads';
 
 /** Row-owned reads; the session-scoped journal owns spending and ambiguous retries. */
 export function useClaudeResetGrants(
@@ -47,23 +47,29 @@ export function useClaudeResetGrants(
     let cancelled = false;
     const current = () =>
       !cancelled && version === generation.current && session === apiClient.getConnectionRevision();
-    void readClaudeResetGrants(authIndex).then(
-      (result) => {
-        if (current()) {
-          setStatus(result);
-          setStatusReadAt(Date.now());
-          setMessage('');
+    const cancelRead = scheduleResetGrantRead(() => {
+      void readResetGrantsForCard(authIndex).then(
+        (result) => {
+          if (current()) {
+            setStatus(result);
+            setStatusReadAt(Date.now());
+            setMessage('');
+          }
+        },
+        (error: unknown) => {
+          if (current()) {
+            setMessage(
+              error instanceof AnthropicResetGrantError && error.code === 'rate_limited'
+                ? 'read_throttled'
+                : 'read_error'
+            );
+          }
         }
-      },
-      (error: unknown) => {
-        if (!current()) return;
-        const throttled =
-          error instanceof AnthropicResetGrantError && error.code === 'rate_limited';
-        setMessage(throttled ? 'read_throttled' : 'read_error');
-      }
-    );
+      );
+    }, current);
     return () => {
       cancelled = true;
+      cancelRead();
       generation.current += 1;
     };
   }, [authIndex, key, enabled, disabled, sessionActive, session, refreshToken, reload]);
@@ -131,7 +137,11 @@ export function useClaudeResetGrants(
           showNotification(
             t(
               `claude_reset.${
-                unresolved && !unresolved.code ? 'unknown' : throttled ? 'read_throttled' : 'blocked'
+                unresolved && !unresolved.code
+                  ? 'unknown'
+                  : throttled
+                    ? 'read_throttled'
+                    : 'blocked'
               }`
             ),
             'error'

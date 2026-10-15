@@ -619,7 +619,13 @@ test('a claim pinned to its connection is not sent after a switch', async () => 
   const sent: string[] = [];
   instance.defaults.adapter = async (config) => {
     sent.push(String(config.url));
-    return { data: { status_code: 200, body: { result: 'reset' } }, status: 200, statusText: 'OK', headers: {}, config };
+    return {
+      data: { status_code: 200, body: { result: 'reset' } },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    };
   };
   try {
     const revision = apiClient.getConnectionRevision();
@@ -627,12 +633,33 @@ test('a claim pinned to its connection is not sent after a switch', async () => 
       claimClaudeResetGrantDetailed('a', organization, grant.id, 'r', revision + 1)
     ).rejects.toThrow('session');
     expect(sent).toEqual([]);
-    expect(await claimClaudeResetGrantDetailed('a', organization, grant.id, 'r', revision)).toEqual({
-      code: 'reset',
-      reason: null,
-    });
+    expect(await claimClaudeResetGrantDetailed('a', organization, grant.id, 'r', revision)).toEqual(
+      {
+        code: 'reset',
+        reason: null,
+      }
+    );
     expect(sent).toEqual(['/requests/api-call']);
   } finally {
     instance.defaults.adapter = adapter;
   }
+});
+
+test('account reads map upstream 429 to a sanitized typed rate-limit failure', async () => {
+  let calls = 0;
+  apiCallApi.request = async () => {
+    calls += 1;
+    return { statusCode: 429, body: 'private upstream detail', bodyText: '', header: {} };
+  };
+  for (const [read, index] of [
+    [readClaudeResetGrants, 'status-index'],
+    [readClaudeOrganization, 'profile-index'],
+  ] as const) {
+    await expect(read(index)).rejects.toMatchObject({
+      name: 'AnthropicResetGrantError',
+      code: 'rate_limited',
+      message: 'Anthropic reset-grant read failed (rate_limited)',
+    });
+  }
+  expect(calls).toBe(2); // Neither read retries; each account records its own throttle.
 });
