@@ -26,6 +26,10 @@ import type {
   XaiQuotaState,
 } from '@/types';
 import { formatDateTimeValue } from '@/utils/format';
+import {
+  resolveAntigravityBucketLabelKey,
+  resolveAntigravityGroupLabelKey,
+} from './antigravityLabels';
 import { normalizePlanType } from './parsers';
 import { PREMIUM_CODEX_PLAN_TYPES, resolvePlanTier, type CodexPlanTier } from './planTier';
 import { parseIsoToMs, resolveResetMs } from './resetInstants';
@@ -207,25 +211,16 @@ export function antigravityPlanBadge(
 
 /* ---------- Antigravity label lookup (shared with its body) ---------- */
 
-const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
-  ['gemini models', 'group_gemini_models'],
-  ['claude and gpt models', 'group_claude_gpt_models'],
-]);
-
-const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
-  ['weekly limit', 'weekly_limit'],
-  ['daily limit', 'daily_limit'],
-  ['5 hour limit', 'five_hour_limit'],
-  ['5-hour limit', 'five_hour_limit'],
-  ['five hour limit', 'five_hour_limit'],
-  ['monthly limit', 'monthly_limit'],
-]);
-
 /** Antigravity sends English display names; map the known ones onto keys. */
-export function antigravityLabelKey(value: string, scope: 'group' | 'bucket'): string | null {
-  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
-  const keys = scope === 'group' ? ANTIGRAVITY_GROUP_LABEL_KEYS : ANTIGRAVITY_BUCKET_LABEL_KEYS;
-  const key = keys.get(normalized);
+export function antigravityLabelKey(
+  value: string,
+  scope: 'group' | 'bucket',
+  window?: string
+): string | null {
+  const key =
+    scope === 'group'
+      ? resolveAntigravityGroupLabelKey(value)
+      : resolveAntigravityBucketLabelKey(value, window);
   return key ? `antigravity_quota.${key}` : null;
 }
 
@@ -558,7 +553,7 @@ const buildAntigravityModel = (quota: AntigravityQuotaState): QuotaCredentialRow
   (quota.groups ?? []).forEach((group) => {
     const groupLabelKey = antigravityLabelKey(group.label, 'group');
     group.buckets.forEach((bucket) => {
-      const labelKey = antigravityLabelKey(bucket.label, 'bucket');
+      const labelKey = antigravityLabelKey(bucket.label, 'bucket', bucket.window);
       windows.push({
         columnId: columnIdFrom(
           labelKey ?? undefined,

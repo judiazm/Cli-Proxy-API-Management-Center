@@ -11,6 +11,7 @@ import { QuotaMeter } from '../../components/QuotaMeter';
 import { collectQuotaRowInstants, pickUrgentRowId } from '../../resetSchedule';
 import type { QuotaBodyProps } from '../../types';
 import { getNextAntigravityCountdownUpdateDelay } from './countdown';
+import { resolveAntigravityGroupModels, shouldShowAntigravityQuotaAvailable } from './labels';
 
 const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
   const totalMinutes = Math.max(1, Math.ceil(deltaMs / 60000));
@@ -57,9 +58,10 @@ const formatAntigravityResetLabel = (
 const translateAntigravityQuotaLabel = (
   value: string,
   scope: 'group' | 'bucket',
-  t: TFunction
+  t: TFunction,
+  window?: string
 ): string => {
-  const key = antigravityLabelKey(value, scope);
+  const key = antigravityLabelKey(value, scope, window);
   return key ? t(key) : value;
 };
 
@@ -142,7 +144,12 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
       ) : (
         groups.map((group) => {
           const groupLabel = translateAntigravityQuotaLabel(group.label, 'group', t);
-          const groupDescription = translateAntigravityQuotaDescription(group.description, t);
+          const groupModels = resolveAntigravityGroupModels(group.label, group.description);
+          const groupDescription = groupModels
+            ? t('antigravity_quota.group_models_description', {
+                models: groupModels.join(', '),
+              })
+            : translateAntigravityQuotaDescription(group.description, t);
 
           return (
             <div key={group.id} className={classes.antigravityQuotaGroup}>
@@ -157,14 +164,18 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
               {group.buckets.map((bucket, index) => {
                 const clamped = Math.max(0, Math.min(1, bucket.remainingFraction));
                 const percent = clamped * 100;
-                const percentLabel =
-                  bucket.remainingFraction === 1
-                    ? t('antigravity_quota.quota_available')
-                    : t('antigravity_quota.remaining_percent', {
-                        percent: Math.round(percent),
-                      });
+                const percentLabel = shouldShowAntigravityQuotaAvailable(bucket, group.buckets)
+                  ? t('antigravity_quota.quota_available')
+                  : t('antigravity_quota.remaining_percent', {
+                      percent: Math.round(percent),
+                    });
                 const resetLabel = formatAntigravityResetLabel(bucket.resetTime, t, nowMs);
-                const bucketLabel = translateAntigravityQuotaLabel(bucket.label, 'bucket', t);
+                const bucketLabel = translateAntigravityQuotaLabel(
+                  bucket.label,
+                  'bucket',
+                  t,
+                  bucket.window
+                );
                 const bucketDescription = translateAntigravityQuotaDescription(
                   bucket.description,
                   t
