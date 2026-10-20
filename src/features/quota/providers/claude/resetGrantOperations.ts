@@ -10,6 +10,36 @@ import {
   type AnthropicResetSettledCode,
 } from '@/services/api/claudeResetGrants';
 
+export type ResetGrantFailureStage =
+  'organization' | 'status' | 'eligibility' | 'request_id' | 'operation';
+
+/** Only locally generated codes are displayed; never expose raw upstream errors. */
+export class ResetGrantPreflightError extends Error {
+  constructor(
+    readonly stage: ResetGrantFailureStage,
+    readonly reason: string
+  ) {
+    super(`${stage}: ${reason}`);
+  }
+}
+
+export function resetGrantFailureMessageKey(error: unknown) {
+  return error instanceof ResetGrantPreflightError
+    ? `claude_reset.failure_${error.stage}`
+    : 'claude_reset.blocked';
+}
+
+async function readPreflight<T>(stage: 'organization' | 'status', read: () => Promise<T>) {
+  try {
+    return await read();
+  } catch (error) {
+    throw new ResetGrantPreflightError(
+      stage,
+      error instanceof AnthropicResetGrantError ? error.code : 'request_failed'
+    );
+  }
+}
+
 export const RETRY_WINDOW_MS = 10 * 60 * 1000;
 /** A grant status this recent gates the claim without another read; Anthropic rechecks it. */
 export const STATUS_FRESH_MS = 2 * 60 * 1000;
@@ -76,15 +106,6 @@ export function createResetGrantOperations(deps = defaultDependencies) {
     }
     return revision;
   };
-  // Anthropic throttles these OAuth reads per account; say so instead of a generic block.
-  const throttleAware = <T>(read: () => Promise<T>) =>
-    read().then(undefined, (error: unknown) =>
-      Promise.reject(
-        error instanceof AnthropicResetGrantError && error.code === 'rate_limited'
-          ? new Error('rate_limited')
-          : error
-      )
-    );
   return {
     inspect(key: string) {
       syncSession();
@@ -98,9 +119,9 @@ export function createResetGrantOperations(deps = defaultDependencies) {
     ) {
       const session = syncSession();
       const assertSession = () => {
-        if (deps.revision() !== session) throw new Error('session');
+        if (deps.revision() !== session) throw new ResetGrantPreflightError('operation', 'session');
       };
-      if (busy.has(key)) throw new Error('busy');
+      if (busy.has(key)) throw new ResetGrantPreflightError('operation', 'busy');
       busy.add(key);
       try {
         let operation = operations.get(key);
@@ -109,7 +130,7 @@ export function createResetGrantOperations(deps = defaultDependencies) {
           operation &&
           (operation.grantId !== grantId || deps.now() - operation.createdAt >= RETRY_WINDOW_MS)
         )
-          throw new Error('expired');
+          throw new ResetGrantPreflightError('operation', 'expired');
         const wasRetry = Boolean(operation);
         // A fresh claim reuses a recent profile read: each extra Anthropic call before the claim
         // raised the odds of the 429s that refused three dashboard claims on 2026-10-07. A retry
@@ -118,35 +139,46 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         const organization =
           !operation && cached && deps.now() - cached.at < ORGANIZATION_CACHE_MS
             ? cached.uuid
-            : await throttleAware(() => deps.readOrganization(authIndex));
+            : await readPreflight('organization', () => deps.readOrganization(authIndex));
         assertSession();
         organizations.set(authIndex, { uuid: organization, at: deps.now() });
-        if (operation && operation.organization !== organization) throw new Error('identity');
+        if (operation && operation.organization !== organization)
+          throw new ResetGrantPreflightError('operation', 'identity');
         if (!operation) {
           const age = known ? deps.now() - known.readAt : Infinity;
           const status =
             known && age >= 0 && age <= STATUS_FRESH_MS
               ? known.status
-              : await throttleAware(() => deps.readStatus(authIndex));
+              : await readPreflight('status', () => deps.readStatus(authIndex));
           assertSession();
           const grant = status.grants.find((item) => item.id === grantId);
           const now = deps.now();
-          if (
-            anthropicResetGrantBlocker(status, grantId) ||
-            !grant ||
-            (grant.startsAt && Date.parse(grant.startsAt) > now) ||
-            (grant.endsAt && Date.parse(grant.endsAt) <= now) ||
-            (status.cooldownUntil && Date.parse(status.cooldownUntil) > now)
-          ) {
-            throw new Error('blocked');
+          const blocker = anthropicResetGrantBlocker(status, grantId);
+          const reason =
+            blocker ??
+            (!grant
+              ? 'unknown_grant'
+              : grant.startsAt && Date.parse(grant.startsAt) > now
+                ? 'not_started'
+                : grant.endsAt && Date.parse(grant.endsAt) <= now
+                  ? 'grant_expired'
+                  : status.cooldownUntil && Date.parse(status.cooldownUntil) > now
+                    ? 'cooldown'
+                    : null);
+          if (reason) throw new ResetGrantPreflightError('eligibility', `blocked_${reason}`);
+          let requestId: string;
+          try {
+            requestId = deps.requestId();
+          } catch {
+            throw new ResetGrantPreflightError('request_id', 'generation_failed');
           }
-          operation = { grantId, organization, requestId: deps.requestId(), createdAt: now };
+          operation = { grantId, organization, requestId, createdAt: now };
           operations.set(key, operation);
         }
         // Re-check immediately before dispatch; never send against a replacement connection.
         assertSession();
         if (wasRetry && deps.now() - operation.createdAt >= RETRY_WINDOW_MS) {
-          throw new Error('expired');
+          throw new ResetGrantPreflightError('operation', 'expired');
         }
         const answer = await deps.claim(
           authIndex,

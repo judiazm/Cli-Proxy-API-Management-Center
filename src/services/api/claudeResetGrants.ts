@@ -252,6 +252,8 @@ async function readAccount(authIndex: string, path: string): Promise<Record<stri
     },
     { timeout: 12000 }
   );
+  if (response.statusCode === 401 || response.statusCode === 403)
+    throw new AnthropicResetGrantError('auth');
   if (response.statusCode === 429) {
     noteClaudeReadThrottle(authIndex, response.header);
     throw new AnthropicResetGrantError('rate_limited');

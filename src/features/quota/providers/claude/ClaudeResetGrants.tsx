@@ -10,7 +10,12 @@ import {
 } from '@/services/api/claudeResetGrants';
 import type { AuthFileItem } from '@/types';
 import { normalizeAuthIndex } from '@/utils/quota';
-import { resetGrantOperations, RETRY_WINDOW_MS } from './resetGrantOperations';
+import {
+  resetGrantOperations,
+  RETRY_WINDOW_MS,
+  ResetGrantPreflightError,
+  resetGrantFailureMessageKey,
+} from './resetGrantOperations';
 import { describeResetGrantState, selectResetGrant } from './selectResetGrant';
 import { readResetGrantsForCard, scheduleResetGrantRead } from './resetGrantReads';
 
@@ -130,19 +135,21 @@ export function useClaudeResetGrants(
             ) + reason,
             spent && answer.cooldownCleared ? 'success' : 'error'
           );
-        } catch (error) {
+        } catch (error: unknown) {
           if (!current()) return;
           const unresolved = resetGrantOperations.inspect(key);
-          const throttled = error instanceof Error && error.message === 'rate_limited';
           showNotification(
             t(
-              `claude_reset.${
-                unresolved && !unresolved.code
-                  ? 'unknown'
-                  : throttled
-                    ? 'read_throttled'
-                    : 'blocked'
-              }`
+              unresolved && !unresolved.code
+                ? 'claude_reset.unknown'
+                : error instanceof ResetGrantPreflightError &&
+                    (error.stage === 'organization' || error.stage === 'status') &&
+                    error.reason === 'rate_limited'
+                  ? 'claude_reset.read_throttled'
+                  : resetGrantFailureMessageKey(error),
+              {
+                code: error instanceof ResetGrantPreflightError ? error.reason : '',
+              }
             ),
             'error'
           );
