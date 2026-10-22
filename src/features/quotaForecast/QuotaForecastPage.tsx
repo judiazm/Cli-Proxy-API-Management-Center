@@ -16,7 +16,7 @@ import {
   type UsageSummaryResponse,
 } from '@/services/api';
 import { useAuthStore, useQuotaStore } from '@/stores';
-import { displayCredentialLabel } from '@/utils/quota';
+import { displayCredentialLabel, formatRelativeInstant, quotaRemainingTone } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { browserTimeZone } from '@/features/usage/logic/timeRange';
 import { resolveTimeZoneLabel } from '@/utils/time/timezone';
@@ -24,15 +24,18 @@ import { formatUsageCount, formatUsageExact } from '@/features/usage/logic/forma
 import { useQuotaBatchLoader } from '@/features/quota/hooks/useQuotaBatchLoader';
 import { classifyQuotaFiles, type QuotaFileEntry } from '@/features/quota/logic';
 import { readQuotaShowEmails } from '@/features/quota/uiState';
+import { fetchPrefixes } from '@/features/pools/hooks/usePoolsData';
 import {
   WEEK_MS,
   FORECAST_RECENT_MS,
   buildQuotaForecast,
   buildForecastUsageMetrics,
-  isQuotaAtRisk,
+  simulatePools,
   startOfLocalWeek,
+  type ForecastOutcome,
   type ForecastProvider,
   type ForecastHistoryState,
+  type PoolOutlook,
   type QuotaForecast,
 } from './forecast';
 import styles from './QuotaForecastPage.module.scss';
@@ -44,6 +47,52 @@ const describeError = (error: unknown, fallback: string): string =>
 
 const formatPercent = (value: number | null): string =>
   value === null ? '--' : `${Math.round(value)}%`;
+
+type DisplayStatus = Exclude<ForecastOutcome, 'lasts-to-reset'> | 'tight' | 'on-track';
+
+/** Most urgent first: out of quota, then earliest projected runout, then the rest. */
+const STATUS_ORDER: Record<DisplayStatus, number> = {
+  exhausted: 0,
+  'before-reset': 1,
+  tight: 2,
+  'on-track': 3,
+  unknown: 4,
+};
+const STATUS_KEYS = Object.keys(STATUS_ORDER) as DisplayStatus[];
+/** At or above this calibrated chance, an account expected to last is still worth watching. */
+const TIGHT_CHANCE = 0.35;
+
+const displayStatus = (forecast: QuotaForecast): DisplayStatus =>
+  forecast.outcome === 'lasts-to-reset'
+    ? (forecast.runoutChance ?? 0) >= TIGHT_CHANCE
+      ? 'tight'
+      : 'on-track'
+    : forecast.outcome;
+
+/** Position of an instant inside the weekly cycle that ends at the reported reset. */
+const cyclePercent = (instantMs: number, cycleStartMs: number): number =>
+  Math.min(100, Math.max(0, ((instantMs - cycleStartMs) / WEEK_MS) * 100));
+
+/** A duration in one unit people read at a glance: minutes, hours, or days. */
+const formatSpan = (ms: number, locale?: string): string => {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  const [value, unit] =
+    minutes < 60
+      ? [minutes, 'minute']
+      : minutes < 48 * 60
+        ? [Math.round(minutes / 60), 'hour']
+        : [minutes / (24 * 60), 'day'];
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit,
+      unitDisplay: 'long',
+      maximumFractionDigits: 1,
+    }).format(value);
+  } catch {
+    return `${Math.round(value)} ${unit}`;
+  }
+};
 
 type ForecastEntry = QuotaFileEntry & { type: ForecastProvider };
 
@@ -60,6 +109,7 @@ export function QuotaForecastPage() {
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
 
   const [entries, setEntries] = useState<ForecastEntry[]>([]);
+  const [prefixes, setPrefixes] = useState<Map<string, string>>(new Map());
   const [currentWeek, setCurrentWeek] = useState<UsageSummaryResponse | null>(null);
   const [recent, setRecent] = useState<UsageSummaryResponse | null>(null);
   const [history, setHistory] = useState<QuotaHistoryResponse | null>(null);
@@ -104,6 +154,14 @@ export function QuotaForecastPage() {
       if (!current()) return;
       const forecastEntries = classifyQuotaFiles(files?.files ?? []).filter(isForecastEntry);
       setEntries(forecastEntries);
+
+      const prefixTask = (async () => {
+        const resolved = await fetchPrefixes(forecastEntries.map((entry) => entry.file));
+        if (!current()) return;
+        setPrefixes(
+          new Map(forecastEntries.map((entry, index) => [entry.file.name, resolved[index] ?? '']))
+        );
+      })();
 
       const usageTask = (async () => {
         try {
@@ -175,7 +233,7 @@ export function QuotaForecastPage() {
           }
         }
       })();
-      await Promise.all([usageTask, historyTask]);
+      await Promise.all([usageTask, historyTask, prefixTask]);
     } catch (failure: unknown) {
       if (!current()) return;
       setError(describeError(failure, t('quota_forecast.load_failed')));
@@ -225,63 +283,178 @@ export function QuotaForecastPage() {
     [entries, currentWeek, recent]
   );
 
-  const rows = useMemo(
-    () =>
-      entries.map((entry) => {
-        const cacheKey = getQuotaCacheKey(entry.file);
-        const quota = entry.type === 'claude' ? claudeQuota[cacheKey] : codexQuota[cacheKey];
-        return {
-          entry,
-          quota,
-          forecast: buildQuotaForecast(entry.type, quota, nowMs, {
-            authId: entry.file.name,
-            authIndex: entry.file.authIndex,
-            history,
-            state: historyState,
-            diagnostics: storeDiagnostics,
-          }),
-          usage: metrics.get(entry.file.name),
-        };
-      }),
-    [entries, claudeQuota, codexQuota, metrics, nowMs, history, historyState, storeDiagnostics]
+  const { rows, pools } = useMemo(() => {
+    const own = entries.map((entry) => {
+      const cacheKey = getQuotaCacheKey(entry.file);
+      const quota = entry.type === 'claude' ? claudeQuota[cacheKey] : codexQuota[cacheKey];
+      return {
+        entry,
+        quota,
+        forecast: buildQuotaForecast(entry.type, quota, nowMs, {
+          authId: entry.file.name,
+          authIndex: entry.file.authIndex,
+          history,
+          state: historyState,
+          diagnostics: storeDiagnostics,
+        }),
+        usage: metrics.get(entry.file.name),
+      };
+    });
+    const simulation = simulatePools(
+      own
+        .filter(({ entry }) => !entry.file.disabled)
+        .map(({ entry, forecast }) => {
+          const prefix = prefixes.get(entry.file.name) ?? '';
+          return {
+            id: entry.file.name,
+            pool: prefix ? `${entry.type}/${prefix}` : entry.type,
+            priority: typeof entry.file.priority === 'number' ? entry.file.priority : 0,
+            forecast,
+          };
+        }),
+      nowMs
+    );
+    return {
+      rows: own.map((row) => ({
+        ...row,
+        forecast: simulation.forecasts.get(row.entry.file.name) ?? row.forecast,
+      })),
+      pools: simulation.pools,
+    };
+  }, [
+    entries,
+    prefixes,
+    claudeQuota,
+    codexQuota,
+    metrics,
+    nowMs,
+    history,
+    historyState,
+    storeDiagnostics,
+  ]);
+
+  const labelFor = useCallback(
+    (authId: string): string => {
+      const entry = entries.find((item) => item.file.name === authId);
+      return displayCredentialLabel(authId, entry?.file.note, showEmails);
+    },
+    [entries, showEmails]
   );
 
-  const totals = useMemo(
-    () => ({
-      currentWeekTokens: rows.reduce((sum, row) => sum + (row.usage?.currentWeekTokens ?? 0), 0),
-      dailyTokens:
-        rows.length > 0 && rows.every((row) => row.usage?.dailyTokens != null)
-          ? rows.reduce((sum, row) => sum + (row.usage?.dailyTokens ?? 0), 0)
-          : null,
-      atRisk: rows.filter((row) => isQuotaAtRisk(row.forecast)).length,
-      unknown: rows.filter((row) => row.forecast.outcome === 'unknown').length,
-    }),
+  const sortedRows = useMemo(
+    () =>
+      rows
+        .map((row, index) => ({ row, index }))
+        .sort(
+          (left, right) =>
+            STATUS_ORDER[displayStatus(left.row.forecast)] -
+              STATUS_ORDER[displayStatus(right.row.forecast)] ||
+            (left.row.forecast.exhaustAtMs ?? Infinity) -
+              (right.row.forecast.exhaustAtMs ?? Infinity) ||
+            left.index - right.index
+        )
+        .map(({ row }) => row),
     [rows]
   );
+
+  const totals = useMemo(() => {
+    const byOutcome: Record<DisplayStatus, number> = {
+      exhausted: 0,
+      'before-reset': 0,
+      tight: 0,
+      'on-track': 0,
+      unknown: 0,
+    };
+    rows.forEach((row) => {
+      byOutcome[displayStatus(row.forecast)] += 1;
+    });
+    return {
+      currentWeekTokens: rows.reduce((sum, row) => sum + (row.usage?.currentWeekTokens ?? 0), 0),
+      // Accounts without a recent request have no pace; they add nothing rather than blanking the total.
+      dailyTokens: rows.some((row) => row.usage?.dailyTokens != null)
+        ? rows.reduce((sum, row) => sum + (row.usage?.dailyTokens ?? 0), 0)
+        : null,
+      byOutcome,
+      unknown: byOutcome.unknown,
+    };
+  }, [rows]);
+
+  const locale = i18n.resolvedLanguage;
 
   const formatInstant = (value: number | null): string =>
     value === null
       ? '--'
-      : `${new Date(value).toLocaleString(i18n.resolvedLanguage, {
+      : `${new Date(value).toLocaleString(locale, {
           month: 'short',
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
         })} ${resolveTimeZoneLabel(new Date(value))}`;
 
-  const forecastText = (forecast: QuotaForecast): string => {
+  const formatNumber = (value: number): string =>
+    value.toLocaleString(locale, { maximumFractionDigits: 1 });
+
+  const statusLabel = (status: DisplayStatus): string =>
+    t(`quota_forecast.status_${status.replace(/-/g, '_')}`);
+
+  const formatPercentChance = (value: number): string =>
+    value.toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 });
+
+  const headlineText = (forecast: QuotaForecast): string => {
     switch (forecast.outcome) {
       case 'exhausted':
-        return t('quota_forecast.outcome_exhausted');
-      case 'before-reset':
-        return t('quota_forecast.outcome_before_reset', {
-          date: formatInstant(forecast.exhaustAtMs),
-        });
+        return forecast.resetAtMs === null
+          ? statusLabel('exhausted')
+          : t('quota_forecast.headline_exhausted', {
+              relative: formatRelativeInstant(forecast.resetAtMs, nowMs, locale),
+            });
+      case 'before-reset': {
+        const values = {
+          relative: formatRelativeInstant(forecast.exhaustAtMs ?? nowMs, nowMs, locale),
+          gap: formatSpan((forecast.resetAtMs ?? 0) - (forecast.exhaustAtMs ?? 0), locale),
+          account: forecast.handoffAfter ? labelFor(forecast.handoffAfter) : '',
+        };
+        return forecast.driver === 'pool-handoff' && forecast.handoffAfter
+          ? t('quota_forecast.headline_handoff', values)
+          : t('quota_forecast.headline_before_reset', values);
+      }
       case 'lasts-to-reset':
-        return t('quota_forecast.outcome_lasts');
+        return t(
+          forecast.driver === 'idle' ? 'quota_forecast.headline_idle' : 'quota_forecast.headline_lasts',
+          { relative: formatRelativeInstant(forecast.resetAtMs ?? nowMs, nowMs, locale) }
+        );
       default:
         return t(`quota_forecast.reason_${forecast.reason.replace(/-/g, '_')}`);
     }
+  };
+
+  const confidenceText = (forecast: QuotaForecast): string =>
+    forecast.confidence === 'reported'
+      ? t('quota_forecast.reported')
+      : forecast.confidence === 'estimated'
+        ? t(
+            forecast.quality === 'moderate'
+              ? 'quota_forecast.moderate_confidence'
+              : 'quota_forecast.low_confidence'
+          )
+        : t('quota_forecast.unknown');
+
+  const poolLabel = (pool: PoolOutlook): string => {
+    const [provider, prefix] = pool.pool.split('/');
+    const name = provider === 'claude' ? 'Claude' : 'Codex';
+    return prefix
+      ? t('quota_forecast.pool_prefixed', { name, prefix })
+      : t('quota_forecast.pool_name', { name });
+  };
+
+  const poolText = (pool: PoolOutlook): string => {
+    if (pool.pacePercentPerDay <= 0) return t('quota_forecast.pool_idle');
+    if (pool.dryFromMs === null) return t('quota_forecast.pool_covered');
+    return t('quota_forecast.pool_dry', {
+      from: formatInstant(pool.dryFromMs),
+      relative: formatRelativeInstant(pool.dryFromMs, nowMs, locale),
+      until: formatInstant(pool.dryUntilMs),
+    });
   };
 
   const busy = loading || batchLoading;
@@ -308,11 +481,6 @@ export function QuotaForecastPage() {
         </Button>
       </header>
 
-      <div className={styles.confidenceNote} role="note" data-reveal>
-        <span className={styles.lowBadge}>{t('quota_forecast.estimated')}</span>
-        <span>{t('quota_forecast.method_note')}</span>
-      </div>
-
       {(error || usageError || historyError) && (
         <div className={styles.errorBanner} role="alert">
           {error || usageError || historyError}
@@ -331,188 +499,310 @@ export function QuotaForecastPage() {
         />
       ) : (
         <>
-          <section className={styles.summary} aria-label={t('quota_forecast.summary_label')}>
-            <article className={styles.stat}>
+          <section className={styles.overview} aria-label={t('quota_forecast.summary_label')}>
+            <div className={styles.statusSummary}>
+              <h2 className={styles.overviewTitle}>
+                {t('quota_forecast.accounts_count', { count: rows.length })}
+              </h2>
+              <div className={styles.statusBar} aria-hidden="true">
+                {STATUS_KEYS.filter((status) => totals.byOutcome[status] > 0).map((status) => (
+                  <span
+                    key={status}
+                    className={styles.statusSegment}
+                    data-status={status}
+                    style={{ flexGrow: totals.byOutcome[status] }}
+                  />
+                ))}
+              </div>
+              <ul className={styles.statusLegend}>
+                {STATUS_KEYS.map((status) => (
+                  <li key={status} data-status={status} data-empty={totals.byOutcome[status] === 0}>
+                    <span className={styles.swatch} aria-hidden="true" />
+                    <strong>{totals.byOutcome[status]}</strong>
+                    <span>{statusLabel(status)}</span>
+                  </li>
+                ))}
+              </ul>
+              {pools.length > 0 && (
+                <ul className={styles.poolList} aria-label={t('quota_forecast.pools_label')}>
+                  {pools.map((pool) => (
+                    <li key={pool.pool} data-dry={pool.dryFromMs !== null}>
+                      <strong>{poolLabel(pool)}</strong>
+                      <span>{poolText(pool)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className={styles.stat}>
               <span>{t('quota_forecast.this_week')}</span>
               <strong title={currentWeek ? formatUsageExact(totals.currentWeekTokens) : undefined}>
                 {currentWeek ? formatUsageCount(totals.currentWeekTokens) : '--'}
               </strong>
               <small>{t('quota_forecast.tokens')}</small>
-            </article>
-            <article className={styles.stat}>
+            </div>
+            <div className={styles.stat}>
               <span>{t('quota_forecast.daily_pace')}</span>
               <strong>
                 {totals.dailyTokens === null ? '--' : formatUsageCount(totals.dailyTokens)}
               </strong>
               <small>{t('quota_forecast.tokens_per_day')}</small>
-            </article>
-            <article className={styles.stat}>
-              <span>{t('quota_forecast.at_risk')}</span>
-              <strong>{totals.atRisk}</strong>
-              <small>{t('quota_forecast.before_reset')}</small>
-            </article>
-            <article className={styles.stat}>
-              <span>{t('quota_forecast.pool_eta')}</span>
-              <strong>--</strong>
-              <small>{t('quota_forecast.pool_eta_unknown')}</small>
-            </article>
+            </div>
           </section>
 
-          <div className={styles.historyNote}>
-            {usageDisabled
-              ? t('quota_forecast.usage_disabled')
-              : recent
-                ? t('quota_forecast.history_available')
-                : t('quota_forecast.history_unknown')}{' '}
-            {t('quota_forecast.local_week_note')}
+          <div className={styles.listHead}>
+            <ul className={styles.trackLegend}>
+              <li>
+                <span className={styles.legendUsed} aria-hidden="true" />
+                {t('quota_forecast.bar_used')}
+              </li>
+              <li>
+                <span className={styles.legendElapsed} aria-hidden="true" />
+                {t('quota_forecast.legend_elapsed')}
+              </li>
+              <li>
+                <span className={styles.legendNow} aria-hidden="true" />
+                {t('quota_forecast.legend_now')}
+              </li>
+              <li>
+                <span className={styles.legendRange} aria-hidden="true" />
+                {t('quota_forecast.legend_window')}
+              </li>
+              <li>
+                <span className={styles.legendDry} aria-hidden="true" />
+                {t('quota_forecast.legend_dry')}
+              </li>
+            </ul>
           </div>
 
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>{t('quota_forecast.account')}</th>
-                  <th>{t('quota_forecast.provider_quota')}</th>
-                  <th>{t('quota_forecast.this_week')}</th>
-                  <th>{t('quota_forecast.daily_pace')}</th>
-                  <th>{t('quota_forecast.forecast')}</th>
-                  <th>{t('quota_forecast.reset')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ entry, quota, forecast, usage }) => (
-                  <tr key={entry.file.name}>
-                    <td>
-                      <span className={styles.accountName}>
-                        {displayCredentialLabel(entry.file.name, entry.file.note, showEmails)}
+          <ul className={styles.list}>
+            {sortedRows.map(({ entry, quota, forecast, usage }) => {
+              const status = displayStatus(forecast);
+              const cycleStartMs = forecast.resetAtMs === null ? null : forecast.resetAtMs - WEEK_MS;
+              const elapsedPercent =
+                cycleStartMs === null ? null : cyclePercent(nowMs, cycleStartMs);
+              const dryFromPercent =
+                cycleStartMs === null
+                  ? null
+                  : forecast.outcome === 'exhausted'
+                    ? elapsedPercent
+                    : forecast.outcome === 'before-reset' && forecast.exhaustAtMs !== null
+                      ? cyclePercent(forecast.exhaustAtMs, cycleStartMs)
+                      : null;
+              const usedPercent = forecast.usedPercent;
+              return (
+                <li key={entry.file.name} className={styles.row} data-status={status}>
+                  <div className={styles.identity}>
+                    <span className={styles.accountName}>
+                      {displayCredentialLabel(entry.file.name, entry.file.note, showEmails)}
+                    </span>
+                    <span className={styles.accountKind}>
+                      {quota?.status === 'error'
+                        ? t('quota_forecast.quota_error')
+                        : entry.type === 'claude'
+                          ? t('quota_forecast.claude_weekly')
+                          : t('quota_forecast.codex_weekly')}
+                    </span>
+                    <span className={styles.statusPill} data-status={status}>
+                      {statusLabel(status)}
+                    </span>
+                  </div>
+
+                  <div className={styles.remaining}>
+                    <strong>{formatPercent(forecast.remainingPercent)}</strong>
+                    <span>{t('quota_forecast.left')}</span>
+                  </div>
+
+                  <div className={styles.forecastCell}>
+                    <p className={styles.headline}>{headlineText(forecast)}</p>
+                    <div
+                      className={styles.tracks}
+                      role="img"
+                      aria-label={t('quota_forecast.bar_aria', {
+                        used: formatPercent(usedPercent),
+                        elapsed: formatPercent(elapsedPercent),
+                      })}
+                    >
+                      <span className={styles.trackLabel}>{t('quota_forecast.bar_used')}</span>
+                      <span className={styles.track}>
+                        {usedPercent !== null && (
+                          <span
+                            className={styles.usedFill}
+                            data-tone={quotaRemainingTone(forecast.remainingPercent)}
+                            style={{ width: `${usedPercent}%` }}
+                          />
+                        )}
                       </span>
-                      <span className={styles.accountState}>
-                        {quota?.status === 'error'
-                          ? t('quota_forecast.quota_error')
-                          : entry.type === 'claude'
-                            ? t('quota_forecast.claude_weekly')
-                            : t('quota_forecast.codex_weekly')}
+                      <span className={styles.trackValue}>{formatPercent(usedPercent)}</span>
+
+                      <span className={styles.trackLabel}>{t('quota_forecast.bar_elapsed')}</span>
+                      <span className={styles.track}>
+                        {elapsedPercent !== null && (
+                          <span
+                            className={styles.elapsedFill}
+                            style={{ width: `${elapsedPercent}%` }}
+                          />
+                        )}
+                        {cycleStartMs !== null &&
+                          forecast.outcome === 'before-reset' &&
+                          forecast.rangeStartMs !== null &&
+                          forecast.rangeEndMs !== null && (
+                            <span
+                              className={styles.rangeBand}
+                              style={{
+                                left: `${cyclePercent(forecast.rangeStartMs, cycleStartMs)}%`,
+                                width: `${
+                                  cyclePercent(forecast.rangeEndMs, cycleStartMs) -
+                                  cyclePercent(forecast.rangeStartMs, cycleStartMs)
+                                }%`,
+                              }}
+                            />
+                          )}
+                        {dryFromPercent !== null && (
+                          <span
+                            className={styles.dryZone}
+                            style={{ left: `${dryFromPercent}%`, right: 0 }}
+                          />
+                        )}
+                        {elapsedPercent !== null && (
+                          <span className={styles.nowMark} style={{ left: `${elapsedPercent}%` }} />
+                        )}
                       </span>
-                    </td>
-                    <td>
-                      <strong className={styles.metricValue}>
-                        {formatPercent(forecast.remainingPercent)}
-                      </strong>
-                      <span className={styles.reportedBadge}>
-                        {forecast.remainingPercent === null
-                          ? t('quota_forecast.unknown')
-                          : t('quota_forecast.reported')}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={styles.metricValue}>
+                      <span className={styles.trackValue}>{formatPercent(elapsedPercent)}</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.reset}>
+                    <span>{t('quota_forecast.resets')}</span>
+                    <strong>
+                      {forecast.resetAtMs === null
+                        ? '--'
+                        : formatRelativeInstant(forecast.resetAtMs, nowMs, locale)}
+                    </strong>
+                    <small>{formatInstant(forecast.resetAtMs)}</small>
+                  </div>
+
+                  <dl className={styles.details}>
+                    <div>
+                      <dt>{t('quota_forecast.this_week')}</dt>
+                      <dd>
                         {usage?.currentWeekTokens == null
                           ? '--'
-                          : formatUsageCount(usage.currentWeekTokens)}
-                      </span>
-                      <span className={styles.metricUnit}>{t('quota_forecast.tokens')}</span>
-                    </td>
-                    <td>
-                      <span className={styles.metricValue}>
-                        {usage?.dailyTokens === null || usage?.dailyTokens === undefined
+                          : t('quota_forecast.value_tokens', {
+                              value: formatUsageCount(usage.currentWeekTokens),
+                            })}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('quota_forecast.daily_pace')}</dt>
+                      <dd>
+                        {usage?.dailyTokens == null
                           ? '--'
-                          : formatUsageCount(usage.dailyTokens)}
-                      </span>
-                      <span className={styles.metricUnit}>
-                        {t('quota_forecast.tokens_per_day')}
-                        {usage?.observedRecentMs != null && usage.observedRecentMs >= 30 * 60_000
-                          ? ` · ${t('quota_forecast.usage_span', {
-                              days: (usage.observedRecentMs / DAY_MS).toLocaleString(
-                                i18n.resolvedLanguage,
-                                { maximumFractionDigits: 1 }
-                              ),
-                            })}`
-                          : ''}
-                      </span>
-                      {usage?.recentRequests != null && (
-                        <span className={styles.metricUnit}>
-                          {t('quota_forecast.request_context', {
+                          : t('quota_forecast.value_token_pace', {
+                              value: formatUsageCount(usage.dailyTokens),
+                              days: formatNumber((usage.observedRecentMs ?? 0) / DAY_MS),
+                            })}
+                      </dd>
+                    </div>
+                    {usage?.recentRequests != null && (
+                      <div>
+                        <dt>{t('quota_forecast.detail_requests')}</dt>
+                        <dd>
+                          {t('quota_forecast.value_requests', {
                             requests: formatUsageCount(usage.recentRequests),
                             failed: formatUsageCount(usage.recentFailed ?? 0),
                           })}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={styles.forecastText}>{forecastText(forecast)}</span>
-                      <span
-                        className={
-                          forecast.confidence === 'unknown'
-                            ? styles.unknownBadge
-                            : forecast.confidence === 'reported'
-                              ? styles.reportedBadge
-                              : styles.lowBadge
-                        }
-                      >
-                        {forecast.confidence === 'reported'
-                          ? t('quota_forecast.reported')
-                          : forecast.confidence === 'estimated'
-                            ? t(
-                                forecast.quality === 'moderate'
-                                  ? 'quota_forecast.moderate_confidence'
-                                  : 'quota_forecast.low_confidence'
-                              )
-                            : t('quota_forecast.unknown')}
-                      </span>
-                      {forecast.observedAtMs !== null && (
-                        <span className={styles.metricUnit}>
-                          {t('quota_forecast.observation_context', {
+                        </dd>
+                      </div>
+                    )}
+                    {forecast.ratePercentPerDay !== null && (
+                      <div>
+                        <dt>{t('quota_forecast.detail_quota_pace')}</dt>
+                        <dd>
+                          {t('quota_forecast.value_quota_pace', {
+                            percent: formatNumber(forecast.ratePercentPerDay),
+                          })}
+                        </dd>
+                      </div>
+                    )}
+                    {forecast.observedAtMs !== null && (
+                      <div>
+                        <dt>{t('quota_forecast.detail_readings')}</dt>
+                        <dd>
+                          {t('quota_forecast.value_readings', {
                             count: forecast.sampleCount,
-                            hours: (forecast.sampleSpanMs / 3_600_000).toLocaleString(
-                              i18n.resolvedLanguage,
-                              { maximumFractionDigits: 1 }
-                            ),
+                            hours: formatNumber(forecast.sampleSpanMs / 3_600_000),
                             minutes: Math.floor((forecast.ageMs ?? 0) / 60_000),
                           })}
-                        </span>
-                      )}
-                      {forecast.ratePercentPerDay !== null && (
-                        <span className={styles.metricUnit}>
-                          {t('quota_forecast.quota_pace', {
-                            percent: forecast.ratePercentPerDay.toLocaleString(
-                              i18n.resolvedLanguage,
-                              { maximumFractionDigits: 1 }
-                            ),
+                        </dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>{t('quota_forecast.detail_confidence')}</dt>
+                      <dd data-confidence={forecast.quality ?? forecast.confidence}>
+                        {confidenceText(forecast)}
+                      </dd>
+                    </div>
+                    {forecast.runoutChance !== null && (
+                      <div>
+                        <dt>{t('quota_forecast.detail_chance')}</dt>
+                        <dd>
+                          {t('quota_forecast.value_chance', {
+                            percent: formatPercentChance(forecast.runoutChance),
                           })}
-                        </span>
+                        </dd>
+                      </div>
+                    )}
+                    {forecast.outcome === 'before-reset' &&
+                      forecast.rangeStartMs !== null &&
+                      forecast.rangeEndMs !== null && (
+                        <div>
+                          <dt>{t('quota_forecast.detail_window')}</dt>
+                          <dd>
+                            {t('quota_forecast.value_window', {
+                              start: formatInstant(forecast.rangeStartMs),
+                              end:
+                                forecast.rangeEndMs >= (forecast.resetAtMs ?? Infinity)
+                                  ? t('quota_forecast.window_reset')
+                                  : formatInstant(forecast.rangeEndMs),
+                            })}
+                          </dd>
+                        </div>
                       )}
-                      {forecast.resetDetected && (
-                        <span className={styles.metricUnit}>
-                          {t('quota_forecast.reset_excluded')}
-                        </span>
-                      )}
-                      {forecast.includesImportedReadings && (
-                        <span className={styles.metricUnit}>
-                          {t('quota_forecast.imported_readings')}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={styles.metricValue}>
-                        {formatInstant(forecast.resetAtMs)}
-                      </span>
-                      <span className={styles.reportedBadge}>
-                        {forecast.resetAtMs === null
-                          ? t('quota_forecast.unknown')
-                          : t('quota_forecast.reported')}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    {forecast.resetDetected && (
+                      <div className={styles.detailNote}>
+                        <dd>{t('quota_forecast.reset_excluded')}</dd>
+                      </div>
+                    )}
+                    {forecast.includesImportedReadings && (
+                      <div className={styles.detailNote}>
+                        <dd>{t('quota_forecast.imported_readings')}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </li>
+              );
+            })}
+          </ul>
 
           {totals.unknown > 0 && (
             <p className={styles.unknownNote}>
               {t('quota_forecast.unknown_accounts', { count: totals.unknown })}
             </p>
           )}
+
+          <details className={styles.method}>
+            <summary>{t('quota_forecast.how_it_works')}</summary>
+            <p>{t('quota_forecast.method_note')}</p>
+            <p>
+              {usageDisabled
+                ? t('quota_forecast.usage_disabled')
+                : recent
+                  ? t('quota_forecast.history_available')
+                  : t('quota_forecast.history_unknown')}{' '}
+              {t('quota_forecast.local_week_note')}
+            </p>
+          </details>
         </>
       )}
     </div>

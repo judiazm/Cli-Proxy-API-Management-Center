@@ -7,8 +7,11 @@ import {
   buildForecastUsageMetrics,
   firstUsageInstantMs,
   isQuotaAtRisk,
+  runoutChance,
+  simulatePools,
   startOfLocalWeek,
   type ForecastHistoryContext,
+  type QuotaForecast,
 } from '@/features/quotaForecast/forecast';
 import type { ClaudeQuotaState, CodexQuotaState } from '@/types';
 import type { QuotaObservation, UsageMetrics, UsageSummaryResponse } from '@/services/api';
@@ -88,7 +91,7 @@ describe('observed weekly quota forecast', () => {
     expect(buildCodexQuotaForecast(quota(10), NOW, context(rows)).outcome).toBe('lasts-to-reset');
   });
 
-  test('labels longer consistent coverage as moderate, never a calibrated probability', () => {
+  test('labels longer consistent coverage as moderate confidence', () => {
     const rows = Array.from({ length: 7 }, (_, i) =>
       observation(20 + i * 2, NOW - (6 - i) * HOUR_MS)
     );
@@ -259,6 +262,73 @@ describe('observed weekly quota forecast', () => {
       observation(99, NOW, { provider: 'claude' })
     );
     expect(buildCodexQuotaForecast(quota(), NOW, noisy).usedPercent).toBe(50);
+  });
+});
+
+describe('blended pace, calibration and pool handoff', () => {
+  test('a recent burst weighs in through the 6 hour slope', () => {
+    const rows = [
+      observation(10, NOW - 24 * HOUR_MS),
+      observation(12, NOW - 6 * HOUR_MS),
+      observation(30),
+    ];
+    const result = buildCodexQuotaForecast(quota(30), NOW, context(rows));
+    // (18 / 6 h + 20 / 24 h) / 2 = 0.5 + 1/24 points per hour.
+    expect(result.ratePercentPerDay).toBeCloseTo(((18 / 6 + 20 / 24) / 2) * 24, 6);
+    expect(result.driver).toBe('own-pace');
+  });
+
+  test('an unused Codex window that slides forward is not a reset', () => {
+    const rows = [
+      observation(0, NOW - 2 * HOUR_MS, { reset_at_ms: RESET - 3 * HOUR_MS }),
+      observation(0, NOW - 90 * 60_000, { reset_at_ms: RESET - 2 * HOUR_MS }),
+      observation(10, NOW - HOUR_MS),
+      observation(15, NOW - HOUR_MS / 2),
+      observation(20),
+    ];
+    const result = buildCodexQuotaForecast(quota(20), NOW, context(rows));
+    expect(result.resetDetected).toBe(false);
+    expect(result.sampleCount).toBe(3);
+  });
+
+  test('runout chance follows the replayed history and ranges stop at the reset', () => {
+    expect(runoutChance(0)).toBeCloseTo(0.97);
+    expect(runoutChance(0.25)).toBeGreaterThan(runoutChance(1));
+    expect(runoutChance(1)).toBeGreaterThan(runoutChance(3));
+    expect(runoutChance(Infinity)).toBeCloseTo(0.15);
+    const result = buildCodexQuotaForecast(quota(), NOW, context());
+    expect(result.runoutChance).toBeGreaterThan(0.9);
+    expect(result.rangeStartMs!).toBeLessThan(result.exhaustAtMs!);
+    expect(result.rangeEndMs!).toBeGreaterThan(result.exhaustAtMs!);
+    expect(result.rangeEndMs!).toBeLessThanOrEqual(RESET);
+  });
+
+  test('an idle account takes over in fill-first order when the active one runs dry', () => {
+    const active = buildCodexQuotaForecast(quota(), NOW, context());
+    const idle: QuotaForecast = {
+      ...buildCodexQuotaForecast(quota(0), NOW, context([observation(0)])),
+      usedPercent: 0,
+      remainingPercent: 100,
+    };
+    const spare: QuotaForecast = { ...idle };
+    const { forecasts, pools } = simulatePools(
+      [
+        { id: 'b-next.json', pool: 'codex', priority: 100, forecast: idle },
+        { id: 'a-active.json', pool: 'codex', priority: 100, forecast: active },
+        { id: 'c-reserve.json', pool: 'codex', priority: -10, forecast: spare },
+        { id: 'other.json', pool: 'codex/cousin', priority: 100, forecast: idle },
+      ],
+      NOW
+    );
+    const next = forecasts.get('b-next.json')!;
+    expect(next.outcome).toBe('before-reset');
+    expect(next.driver).toBe('pool-handoff');
+    expect(next.handoffAfter).toBe('a-active.json');
+    // 240 points/day: active empties in 5 h, then the next account in 10 h more.
+    expect(Math.abs(next.exhaustAtMs! - (NOW + 15 * HOUR_MS))).toBeLessThanOrEqual(10 * 60_000);
+    expect(forecasts.get('c-reserve.json')!.handoffAfter).toBe('a-active.json');
+    expect(forecasts.get('other.json')!.driver).toBe('idle');
+    expect(pools.find((pool) => pool.pool === 'codex')!.dryFromMs).not.toBeNull();
   });
 });
 

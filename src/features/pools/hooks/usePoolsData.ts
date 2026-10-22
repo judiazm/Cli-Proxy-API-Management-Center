@@ -49,7 +49,7 @@ const fetchPrefix = async (file: AuthFileItem): Promise<string> => {
 };
 
 /** Resolve prefixes a few at a time, keeping the result aligned with `files`. */
-const fetchPrefixes = async (files: readonly AuthFileItem[]): Promise<string[]> => {
+export const fetchPrefixes = async (files: readonly AuthFileItem[]): Promise<string[]> => {
   const prefixes = new Array<string>(files.length).fill('');
   let cursor = 0;
 

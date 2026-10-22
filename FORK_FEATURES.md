@@ -58,25 +58,37 @@ Current release commits: `7d68fac` for Codex and `b36e4e5` for Claude, rebased f
   provider quota state, and usage-store context.
 - `src/features/quotaForecast/forecast.ts` estimates from recorded changes in provider-reported quota
   over the latest 24 hours of the current cycle. Usage tokens are context only and are never
-  converted to quota percent.
+  converted to quota percent (tokens per quota point swings 2 to 4x day to day).
 - `src/services/api/quotaHistory.ts` reads `/usage-store/quota-history` through the v8 client. The
   backend records genuine provider observations; opening the page never fabricates a timestamp.
 - Forecasts isolate provider, auth filename, credential index, and weekly window. Changed resets and
-  material percentage decreases start a new segment. At least three observations spanning 30
-  minutes and one percentage point of growth are required for an estimate.
+  material percentage decreases start a new segment, except an unused Codex window (0% used) whose
+  reset slides forward with every reading. At least three observations spanning 30 minutes and one
+  percentage point of growth are required for an account's own pace.
+- An account's pace is the mean of its 6 h and 24 h slopes. `simulatePools` then replays fill-first
+  routing per pool (provider plus credential prefix): each account keeps its own pace, an exhausted
+  account's pace moves to the first available member by priority then credential ID, and resets
+  refill. An idle account the pool reaches before its reset becomes `before-reset` with driver
+  `pool-handoff`; one it never reaches becomes `lasts-to-reset` with driver `idle`. The pool outlook
+  reports when every member is empty at once.
+- `runoutChance` and the likely window are calibrated from a replay of this proxy's own history
+  (Sep 13 to Oct 21 2026, 939 forecast moments): chance by predicted-runout / time-to-reset, window
+  from the middle half of actual / predicted time-to-empty. In that replay the pool model was right
+  about running out before reset 77% of the time against 61% for the previous 24 h endpoint slope
+  (which also abstained 15% of the time). Re-run the replay before changing the curve.
 - Readings older than 30 minutes, truncated history, and unavailable history remain unknown. Fresh
   provider-reported exhaustion is shown even when the new cycle or observation history is sparse.
   Missing write diagnostics or process-lifetime lost records pause estimates. Imported log readings
   are identified and retain low confidence because their precision is lower.
-- Confidence describes observation coverage and pace stability. It is not a calibrated probability.
-  Rows show sample count, span, age, and observed quota pace; a bounded UI clock updates freshness
+- Confidence describes observation coverage and pace stability; the calibrated chance is separate.
+  Rows show readings, span, age, and observed quota pace; a bounded UI clock updates freshness
   without polling providers.
 - Token totals cover the local Monday week separately from provider cycles. Recent token pace uses
   each account's first recorded request in the query range. Missing summaries remain unknown;
   request and failure counts are usage context. Old connection or refresh responses cannot replace
   current page state.
 - Claude uses the account-wide `seven-day` window. Codex uses its account-wide weekly window.
-- Missing, stale, sparse, invalid, or zero-consumption data must remain explicit unknown states.
+- Missing, stale, sparse, invalid, or truncated data must remain explicit unknown states.
 
 ## Pools
 
