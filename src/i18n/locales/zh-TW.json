@@ -2116,8 +2116,6 @@
     "tokens_per_day": "tokens/天",
     "reported": "供應商回報",
     "unknown": "未知",
-    "claude_weekly": "Claude 每週限額",
-    "codex_weekly": "Codex 每週限額",
     "quota_error": "配額檢查失敗",
     "reason_quota_not_loaded": "正在等待配額資料",
     "reason_weekly_window_missing": "供應商未回報每週限額",
@@ -2183,7 +2181,13 @@
     "pool_prefixed": "{{name}} 池 {{prefix}}/",
     "pool_covered": "可撐到下次重設",
     "pool_idle": "近期未使用",
-    "pool_dry": "所有帳號將在{{relative}}（{{from}}）用完，直到 {{until}}"
+    "pool_dry": "所有帳號將在{{relative}}（{{from}}）用完，直到 {{until}}",
+    "group_label": "分組",
+    "group_none": "全部",
+    "group_provider": "提供者",
+    "group_tier": "方案",
+    "group_pool": "池",
+    "plan_unknown": "未回報方案"
   },
   "providersPage": {
     "behavior": {

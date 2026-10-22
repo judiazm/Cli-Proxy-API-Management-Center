@@ -178,6 +178,14 @@ export function codexPlanBadge(planType: string | null | undefined): QuotaPlanBa
   return { text: planType || normalized, tier };
 }
 
+/** Claude plan chip. Max 20x shares the top finish with Pro 500 and Pro 200; Max 5x the gold one. */
+export function claudePlanBadge(planType: string | null | undefined): QuotaPlanBadge | null {
+  if (!planType) return null;
+  const tier =
+    planType === 'plan_max20' ? 'elite' : planType.startsWith('plan_max') ? 'premium' : 'plain';
+  return { labelKey: `claude_quota.${planType}`, tier };
+}
+
 const XAI_SUPERGROK_LIMIT_CENTS = 15_000;
 const XAI_SUPERGROK_HEAVY_LIMIT_CENTS = 150_000;
 
@@ -282,7 +290,7 @@ const buildClaudeModel = (quota: ClaudeQuotaState): QuotaCredentialRowModel => {
   return {
     ...EMPTY_MODEL,
     stale: quota.status !== 'success' || quota.stale === true,
-    plan: quota.planType ? { labelKey: `claude_quota.${quota.planType}`, tier: 'plain' } : null,
+    plan: claudePlanBadge(quota.planType),
     notes,
     windows,
     messageKey:

@@ -2510,8 +2510,6 @@
     "tokens_per_day": "token/ngày",
     "reported": "Nhà cung cấp báo cáo",
     "unknown": "Không rõ",
-    "claude_weekly": "Giới hạn tuần của Claude",
-    "codex_weekly": "Giới hạn tuần của Codex",
     "quota_error": "Kiểm tra hạn mức thất bại",
     "reason_quota_not_loaded": "Đang chờ dữ liệu hạn mức",
     "reason_weekly_window_missing": "Nhà cung cấp chưa báo cáo giới hạn tuần",
@@ -2577,7 +2575,13 @@
     "pool_prefixed": "Nhóm {{name}} {{prefix}}/",
     "pool_covered": "Đủ đến lần đặt lại kế tiếp",
     "pool_idle": "Gần đây không dùng",
-    "pool_dry": "Mọi tài khoản cạn {{relative}} ({{from}}) đến {{until}}"
+    "pool_dry": "Mọi tài khoản cạn {{relative}} ({{from}}) đến {{until}}",
+    "group_label": "Nhóm theo",
+    "group_none": "Tất cả",
+    "group_provider": "Nhà cung cấp",
+    "group_tier": "Gói",
+    "group_pool": "Nhóm tài khoản",
+    "plan_unknown": "Chưa có thông tin gói"
   },
   "time_zone": {
     "label": "Múi giờ",

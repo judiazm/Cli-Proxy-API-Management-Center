@@ -8,7 +8,7 @@ import {
   PREMIUM_CODEX_PLAN_TYPES,
   resolvePlanTier,
 } from '@/utils/quota';
-import { codexPlanBadge } from '@/utils/quota/rowModel';
+import { claudePlanBadge, codexPlanBadge } from '@/utils/quota/rowModel';
 
 describe('Codex Pro display names', () => {
   for (const [locale, messages] of Object.entries({ en, 'zh-CN': zhCN, 'zh-TW': zhTW, ru })) {
@@ -74,4 +74,15 @@ describe('Codex Pro 500 (plan=promax)', () => {
       expect(messages.codex_quota.plan_promax).toBe('Pro 500');
     });
   }
+});
+
+test('Claude Max 20x takes the top finish, Max 5x the gold one, other plans stay plain', () => {
+  expect(claudePlanBadge('plan_max20')).toEqual({
+    labelKey: 'claude_quota.plan_max20',
+    tier: 'elite',
+  });
+  expect(claudePlanBadge('plan_max5')?.tier).toBe('premium');
+  expect(claudePlanBadge('plan_pro')?.tier).toBe('plain');
+  expect(claudePlanBadge('plan_team')?.tier).toBe('plain');
+  expect(claudePlanBadge(null)).toBeNull();
 });

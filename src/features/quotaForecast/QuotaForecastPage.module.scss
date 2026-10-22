@@ -187,7 +187,118 @@
 
 .listHead {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+}
+
+.groupSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  > span {
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+  }
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  background: var(--bg-tertiary);
+
+  button {
+    padding: 4px 12px;
+    border: 1px solid transparent;
+    border-radius: $radius-full;
+    color: var(--text-secondary);
+    background: transparent;
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 1px;
+    }
+
+    &[aria-pressed='true'] {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      background: var(--floating-surface, var(--bg-primary));
+    }
+  }
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 0 4px;
+}
+
+.groupTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 650;
+  }
+}
+
+.groupCount {
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.groupStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.miniBar {
+  display: flex;
+  gap: 2px;
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.groupNote {
+  color: var(--text-secondary);
+  font-size: 12.5px;
 }
 
 .trackLegend {
@@ -270,7 +381,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -283,12 +394,38 @@
 }
 
 .accountKind {
-  color: var(--text-tertiary);
+  color: var(--danger-color);
   font-size: 12px;
 }
 
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.providerChip {
+  padding: 2px 8px;
+  border-radius: $radius-full;
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.planPlain {
+  padding: 2px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .statusPill {
-  margin-top: 6px;
   padding: 2px 9px;
   border-radius: $radius-full;
   color: color-mix(in srgb, var(--status) 62%, var(--text-primary));
@@ -555,7 +692,12 @@
   }
 
   .listHead {
-    justify-content: flex-start;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .segmented button {
+    padding: 4px 10px;
   }
 
   .poolList li {

@@ -2084,8 +2084,6 @@
     "tokens_per_day": "токенов/день",
     "reported": "Данные поставщика",
     "unknown": "Неизвестно",
-    "claude_weekly": "Недельный лимит Claude",
-    "codex_weekly": "Недельный лимит Codex",
     "quota_error": "Ошибка проверки квоты",
     "reason_quota_not_loaded": "Ожидание данных квоты",
     "reason_weekly_window_missing": "Недельный лимит не предоставлен",
@@ -2151,7 +2149,13 @@
     "pool_prefixed": "Пул {{name}} {{prefix}}/",
     "pool_covered": "Хватит до следующего сброса",
     "pool_idle": "Недавно не использовался",
-    "pool_dry": "Все аккаунты пусты {{relative}} ({{from}}) до {{until}}"
+    "pool_dry": "Все аккаунты пусты {{relative}} ({{from}}) до {{until}}",
+    "group_label": "Группировка",
+    "group_none": "Все",
+    "group_provider": "Провайдер",
+    "group_tier": "Тариф",
+    "group_pool": "Пул",
+    "plan_unknown": "Тариф не указан"
   },
   "providersPage": {
     "behavior": {

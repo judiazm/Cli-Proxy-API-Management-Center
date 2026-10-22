@@ -2090,8 +2090,6 @@
     "tokens_per_day": "tokens/day",
     "reported": "Provider reported",
     "unknown": "Unknown",
-    "claude_weekly": "Claude weekly limit",
-    "codex_weekly": "Codex weekly limit",
     "quota_error": "Quota check failed",
     "reason_quota_not_loaded": "Waiting for quota data",
     "reason_weekly_window_missing": "Weekly limit not reported",
@@ -2157,7 +2155,13 @@
     "pool_prefixed": "{{name}} pool {{prefix}}/",
     "pool_covered": "Covered until the next reset",
     "pool_idle": "No recent use",
-    "pool_dry": "Every account empty {{relative}} ({{from}}) until {{until}}"
+    "pool_dry": "Every account empty {{relative}} ({{from}}) until {{until}}",
+    "group_label": "Group",
+    "group_none": "All",
+    "group_provider": "Provider",
+    "group_tier": "Plan",
+    "group_pool": "Pool",
+    "plan_unknown": "Plan not reported"
   },
   "providersPage": {
     "behavior": {

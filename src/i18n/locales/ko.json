@@ -2504,8 +2504,6 @@
     "tokens_per_day": "tokens/day",
     "reported": "Provider reported",
     "unknown": "Unknown",
-    "claude_weekly": "Claude weekly limit",
-    "codex_weekly": "Codex weekly limit",
     "quota_error": "Quota check failed",
     "reason_quota_not_loaded": "Waiting for quota data",
     "reason_weekly_window_missing": "Weekly limit not reported",
@@ -2571,7 +2569,13 @@
     "pool_prefixed": "{{name}} 풀 {{prefix}}/",
     "pool_covered": "다음 초기화까지 충분함",
     "pool_idle": "최근 사용 없음",
-    "pool_dry": "모든 계정이 {{relative}}({{from}}) 소진되어 {{until}}까지 비어 있음"
+    "pool_dry": "모든 계정이 {{relative}}({{from}}) 소진되어 {{until}}까지 비어 있음",
+    "group_label": "그룹",
+    "group_none": "전체",
+    "group_provider": "제공자",
+    "group_tier": "요금제",
+    "group_pool": "풀",
+    "plan_unknown": "요금제 정보 없음"
   },
   "time_zone": {
     "label": "Time zone",

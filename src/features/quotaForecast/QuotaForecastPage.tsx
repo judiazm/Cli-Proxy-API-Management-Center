@@ -15,8 +15,17 @@ import {
   usageStoreApi,
   type UsageSummaryResponse,
 } from '@/services/api';
-import { useAuthStore, useQuotaStore } from '@/stores';
-import { displayCredentialLabel, formatRelativeInstant, quotaRemainingTone } from '@/utils/quota';
+import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
+import {
+  TYPE_COLORS,
+  claudePlanBadge,
+  codexPlanBadge,
+  displayCredentialLabel,
+  formatRelativeInstant,
+  quotaRemainingTone,
+} from '@/utils/quota';
+import type { QuotaPlanBadge } from '@/utils/quota/rowModel';
+import bodyStyles from '@/features/quota/components/QuotaBody.module.scss';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { browserTimeZone } from '@/features/usage/logic/timeRange';
 import { resolveTimeZoneLabel } from '@/utils/time/timezone';
@@ -68,6 +77,28 @@ const displayStatus = (forecast: QuotaForecast): DisplayStatus =>
       ? 'tight'
       : 'on-track'
     : forecast.outcome;
+
+type GroupBy = 'none' | 'provider' | 'tier' | 'pool';
+const GROUP_OPTIONS: readonly GroupBy[] = ['none', 'provider', 'tier', 'pool'];
+const GROUP_STORAGE_KEY = 'quotaForecast.groupBy';
+const TIER_RANK = { elite: 0, premium: 1, plain: 2 } as const;
+
+const readGroupBy = (): GroupBy => {
+  try {
+    const stored = window.localStorage.getItem(GROUP_STORAGE_KEY);
+    return GROUP_OPTIONS.includes(stored as GroupBy) ? (stored as GroupBy) : 'none';
+  } catch {
+    return 'none';
+  }
+};
+
+/** Plan badge finishes are finalized assets shared with the Quota page; borrow them. */
+const planBadgeClass = (tier: QuotaPlanBadge['tier']): string =>
+  tier === 'elite'
+    ? bodyStyles.elitePlanValue
+    : tier === 'premium'
+      ? bodyStyles.premiumPlanValue
+      : styles.planPlain;
 
 /** Position of an instant inside the weekly cycle that ends at the reported reset. */
 const cyclePercent = (instantMs: number, cycleStartMs: number): number =>
@@ -124,6 +155,16 @@ export function QuotaForecastPage() {
   const [loading, setLoading] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const showEmails = readQuotaShowEmails();
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const [groupBy, setGroupByState] = useState<GroupBy>(readGroupBy);
+  const setGroupBy = (next: GroupBy) => {
+    setGroupByState(next);
+    try {
+      window.localStorage.setItem(GROUP_STORAGE_KEY, next);
+    } catch {
+      // Grouping still works for this visit without storage.
+    }
+  };
 
   const requestRef = useRef(0);
 
@@ -420,7 +461,9 @@ export function QuotaForecastPage() {
       }
       case 'lasts-to-reset':
         return t(
-          forecast.driver === 'idle' ? 'quota_forecast.headline_idle' : 'quota_forecast.headline_lasts',
+          forecast.driver === 'idle'
+            ? 'quota_forecast.headline_idle'
+            : 'quota_forecast.headline_lasts',
           { relative: formatRelativeInstant(forecast.resetAtMs ?? nowMs, nowMs, locale) }
         );
       default:
@@ -439,8 +482,8 @@ export function QuotaForecastPage() {
           )
         : t('quota_forecast.unknown');
 
-  const poolLabel = (pool: PoolOutlook): string => {
-    const [provider, prefix] = pool.pool.split('/');
+  const poolLabel = (poolId: string): string => {
+    const [provider, prefix] = poolId.split('/');
     const name = provider === 'claude' ? 'Claude' : 'Codex';
     return prefix
       ? t('quota_forecast.pool_prefixed', { name, prefix })
@@ -455,6 +498,305 @@ export function QuotaForecastPage() {
       relative: formatRelativeInstant(pool.dryFromMs, nowMs, locale),
       until: formatInstant(pool.dryUntilMs),
     });
+  };
+
+  type ForecastRow = (typeof rows)[number];
+  type PlanChip = { text: string; tier: QuotaPlanBadge['tier'] };
+
+  const providerName = (provider: ForecastProvider): string =>
+    provider === 'claude' ? 'Claude' : 'Codex';
+
+  const providerChip = (provider: ForecastProvider) => {
+    const colors = TYPE_COLORS[provider]?.[resolvedTheme === 'dark' ? 'dark' : 'light'];
+    return (
+      <span
+        className={styles.providerChip}
+        style={colors ? { color: colors.text, background: colors.bg } : undefined}
+      >
+        {providerName(provider)}
+      </span>
+    );
+  };
+
+  const planFor = (provider: ForecastProvider, quota: ForecastRow['quota']): PlanChip | null => {
+    const planType = (quota as { planType?: string | null } | undefined)?.planType ?? null;
+    const badge = provider === 'claude' ? claudePlanBadge(planType) : codexPlanBadge(planType);
+    if (!badge) return null;
+    return { text: badge.labelKey ? t(badge.labelKey) : (badge.text ?? ''), tier: badge.tier };
+  };
+
+  const poolIdFor = (row: ForecastRow): string => {
+    const prefix = prefixes.get(row.entry.file.name) ?? '';
+    return prefix ? `${row.entry.type}/${prefix}` : row.entry.type;
+  };
+
+  interface RowGroup {
+    key: string;
+    label: string;
+    provider: ForecastProvider | null;
+    plan: PlanChip | null;
+    note: string;
+    order: (string | number)[];
+    rows: ForecastRow[];
+  }
+
+  const groups: RowGroup[] = (() => {
+    if (groupBy === 'none') {
+      return [
+        {
+          key: 'all',
+          label: '',
+          provider: null,
+          plan: null,
+          note: '',
+          order: [],
+          rows: sortedRows,
+        },
+      ];
+    }
+    const byKey = new Map<string, RowGroup>();
+    sortedRows.forEach((row) => {
+      const provider = row.entry.type;
+      const providerOrder = provider === 'claude' ? 0 : 1;
+      let key: string = provider;
+      let label = '';
+      let plan: PlanChip | null = null;
+      let note = '';
+      let order: (string | number)[] = [providerOrder];
+      if (groupBy === 'tier') {
+        plan = planFor(provider, row.quota);
+        key = `${provider}|${plan?.text ?? ''}`;
+        label = plan ? '' : t('quota_forecast.plan_unknown');
+        order = [providerOrder, plan ? TIER_RANK[plan.tier] : 3, plan?.text ?? ''];
+      } else if (groupBy === 'pool') {
+        key = poolIdFor(row);
+        const pool = pools.find((item) => item.pool === key);
+        label = poolLabel(key);
+        note = pool ? poolText(pool) : '';
+        order = [providerOrder, key.includes('/') ? 1 : 0, key];
+      }
+      const group = byKey.get(key) ?? {
+        key,
+        label,
+        provider: groupBy === 'pool' ? null : provider,
+        plan,
+        note,
+        order,
+        rows: [],
+      };
+      group.rows.push(row);
+      byKey.set(key, group);
+    });
+    return [...byKey.values()].sort((left, right) => {
+      for (let index = 0; index < Math.max(left.order.length, right.order.length); index += 1) {
+        const a = left.order[index] ?? '';
+        const b = right.order[index] ?? '';
+        if (a !== b) return a < b ? -1 : 1;
+      }
+      return 0;
+    });
+  })();
+
+  const renderRow = ({ entry, quota, forecast, usage }: ForecastRow) => {
+    const status = displayStatus(forecast);
+    const cycleStartMs = forecast.resetAtMs === null ? null : forecast.resetAtMs - WEEK_MS;
+    const elapsedPercent = cycleStartMs === null ? null : cyclePercent(nowMs, cycleStartMs);
+    const dryFromPercent =
+      cycleStartMs === null
+        ? null
+        : forecast.outcome === 'exhausted'
+          ? elapsedPercent
+          : forecast.outcome === 'before-reset' && forecast.exhaustAtMs !== null
+            ? cyclePercent(forecast.exhaustAtMs, cycleStartMs)
+            : null;
+    const usedPercent = forecast.usedPercent;
+    const plan = planFor(entry.type, quota);
+    return (
+      <li key={entry.file.name} className={styles.row} data-status={status}>
+        <div className={styles.identity}>
+          <span className={styles.accountName}>
+            {displayCredentialLabel(entry.file.name, entry.file.note, showEmails)}
+          </span>
+          <span className={styles.badges}>
+            {providerChip(entry.type)}
+            {plan && <span className={planBadgeClass(plan.tier)}>{plan.text}</span>}
+            {quota?.status === 'error' && (
+              <span className={styles.accountKind}>{t('quota_forecast.quota_error')}</span>
+            )}
+          </span>
+          <span className={styles.statusPill} data-status={status}>
+            {statusLabel(status)}
+          </span>
+        </div>
+
+        <div className={styles.remaining}>
+          <strong>{formatPercent(forecast.remainingPercent)}</strong>
+          <span>{t('quota_forecast.left')}</span>
+        </div>
+
+        <div className={styles.forecastCell}>
+          <p className={styles.headline}>{headlineText(forecast)}</p>
+          <div
+            className={styles.tracks}
+            role="img"
+            aria-label={t('quota_forecast.bar_aria', {
+              used: formatPercent(usedPercent),
+              elapsed: formatPercent(elapsedPercent),
+            })}
+          >
+            <span className={styles.trackLabel}>{t('quota_forecast.bar_used')}</span>
+            <span className={styles.track}>
+              {usedPercent !== null && (
+                <span
+                  className={styles.usedFill}
+                  data-tone={quotaRemainingTone(forecast.remainingPercent)}
+                  style={{ width: `${usedPercent}%` }}
+                />
+              )}
+            </span>
+            <span className={styles.trackValue}>{formatPercent(usedPercent)}</span>
+
+            <span className={styles.trackLabel}>{t('quota_forecast.bar_elapsed')}</span>
+            <span className={styles.track}>
+              {elapsedPercent !== null && (
+                <span className={styles.elapsedFill} style={{ width: `${elapsedPercent}%` }} />
+              )}
+              {cycleStartMs !== null &&
+                forecast.outcome === 'before-reset' &&
+                forecast.rangeStartMs !== null &&
+                forecast.rangeEndMs !== null && (
+                  <span
+                    className={styles.rangeBand}
+                    style={{
+                      left: `${cyclePercent(forecast.rangeStartMs, cycleStartMs)}%`,
+                      width: `${
+                        cyclePercent(forecast.rangeEndMs, cycleStartMs) -
+                        cyclePercent(forecast.rangeStartMs, cycleStartMs)
+                      }%`,
+                    }}
+                  />
+                )}
+              {dryFromPercent !== null && (
+                <span className={styles.dryZone} style={{ left: `${dryFromPercent}%`, right: 0 }} />
+              )}
+              {elapsedPercent !== null && (
+                <span className={styles.nowMark} style={{ left: `${elapsedPercent}%` }} />
+              )}
+            </span>
+            <span className={styles.trackValue}>{formatPercent(elapsedPercent)}</span>
+          </div>
+        </div>
+
+        <div className={styles.reset}>
+          <span>{t('quota_forecast.resets')}</span>
+          <strong>
+            {forecast.resetAtMs === null
+              ? '--'
+              : formatRelativeInstant(forecast.resetAtMs, nowMs, locale)}
+          </strong>
+          <small>{formatInstant(forecast.resetAtMs)}</small>
+        </div>
+
+        <dl className={styles.details}>
+          <div>
+            <dt>{t('quota_forecast.this_week')}</dt>
+            <dd>
+              {usage?.currentWeekTokens == null
+                ? '--'
+                : t('quota_forecast.value_tokens', {
+                    value: formatUsageCount(usage.currentWeekTokens),
+                  })}
+            </dd>
+          </div>
+          <div>
+            <dt>{t('quota_forecast.daily_pace')}</dt>
+            <dd>
+              {usage?.dailyTokens == null
+                ? '--'
+                : t('quota_forecast.value_token_pace', {
+                    value: formatUsageCount(usage.dailyTokens),
+                    days: formatNumber((usage.observedRecentMs ?? 0) / DAY_MS),
+                  })}
+            </dd>
+          </div>
+          {usage?.recentRequests != null && (
+            <div>
+              <dt>{t('quota_forecast.detail_requests')}</dt>
+              <dd>
+                {t('quota_forecast.value_requests', {
+                  requests: formatUsageCount(usage.recentRequests),
+                  failed: formatUsageCount(usage.recentFailed ?? 0),
+                })}
+              </dd>
+            </div>
+          )}
+          {forecast.ratePercentPerDay !== null && (
+            <div>
+              <dt>{t('quota_forecast.detail_quota_pace')}</dt>
+              <dd>
+                {t('quota_forecast.value_quota_pace', {
+                  percent: formatNumber(forecast.ratePercentPerDay),
+                })}
+              </dd>
+            </div>
+          )}
+          {forecast.observedAtMs !== null && (
+            <div>
+              <dt>{t('quota_forecast.detail_readings')}</dt>
+              <dd>
+                {t('quota_forecast.value_readings', {
+                  count: forecast.sampleCount,
+                  hours: formatNumber(forecast.sampleSpanMs / 3_600_000),
+                  minutes: Math.floor((forecast.ageMs ?? 0) / 60_000),
+                })}
+              </dd>
+            </div>
+          )}
+          <div>
+            <dt>{t('quota_forecast.detail_confidence')}</dt>
+            <dd data-confidence={forecast.quality ?? forecast.confidence}>
+              {confidenceText(forecast)}
+            </dd>
+          </div>
+          {forecast.runoutChance !== null && (
+            <div>
+              <dt>{t('quota_forecast.detail_chance')}</dt>
+              <dd>
+                {t('quota_forecast.value_chance', {
+                  percent: formatPercentChance(forecast.runoutChance),
+                })}
+              </dd>
+            </div>
+          )}
+          {forecast.outcome === 'before-reset' &&
+            forecast.rangeStartMs !== null &&
+            forecast.rangeEndMs !== null && (
+              <div>
+                <dt>{t('quota_forecast.detail_window')}</dt>
+                <dd>
+                  {t('quota_forecast.value_window', {
+                    start: formatInstant(forecast.rangeStartMs),
+                    end:
+                      forecast.rangeEndMs >= (forecast.resetAtMs ?? Infinity)
+                        ? t('quota_forecast.window_reset')
+                        : formatInstant(forecast.rangeEndMs),
+                  })}
+                </dd>
+              </div>
+            )}
+          {forecast.resetDetected && (
+            <div className={styles.detailNote}>
+              <dd>{t('quota_forecast.reset_excluded')}</dd>
+            </div>
+          )}
+          {forecast.includesImportedReadings && (
+            <div className={styles.detailNote}>
+              <dd>{t('quota_forecast.imported_readings')}</dd>
+            </div>
+          )}
+        </dl>
+      </li>
+    );
   };
 
   const busy = loading || batchLoading;
@@ -527,7 +869,7 @@ export function QuotaForecastPage() {
                 <ul className={styles.poolList} aria-label={t('quota_forecast.pools_label')}>
                   {pools.map((pool) => (
                     <li key={pool.pool} data-dry={pool.dryFromMs !== null}>
-                      <strong>{poolLabel(pool)}</strong>
+                      <strong>{poolLabel(pool.pool)}</strong>
                       <span>{poolText(pool)}</span>
                     </li>
                   ))}
@@ -551,6 +893,25 @@ export function QuotaForecastPage() {
           </section>
 
           <div className={styles.listHead}>
+            <div
+              className={styles.groupSwitch}
+              role="group"
+              aria-label={t('quota_forecast.group_label')}
+            >
+              <span>{t('quota_forecast.group_label')}</span>
+              <div className={styles.segmented}>
+                {GROUP_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={groupBy === option}
+                    onClick={() => setGroupBy(option)}
+                  >
+                    {t(`quota_forecast.group_${option}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <ul className={styles.trackLegend}>
               <li>
                 <span className={styles.legendUsed} aria-hidden="true" />
@@ -575,215 +936,46 @@ export function QuotaForecastPage() {
             </ul>
           </div>
 
-          <ul className={styles.list}>
-            {sortedRows.map(({ entry, quota, forecast, usage }) => {
-              const status = displayStatus(forecast);
-              const cycleStartMs = forecast.resetAtMs === null ? null : forecast.resetAtMs - WEEK_MS;
-              const elapsedPercent =
-                cycleStartMs === null ? null : cyclePercent(nowMs, cycleStartMs);
-              const dryFromPercent =
-                cycleStartMs === null
-                  ? null
-                  : forecast.outcome === 'exhausted'
-                    ? elapsedPercent
-                    : forecast.outcome === 'before-reset' && forecast.exhaustAtMs !== null
-                      ? cyclePercent(forecast.exhaustAtMs, cycleStartMs)
-                      : null;
-              const usedPercent = forecast.usedPercent;
-              return (
-                <li key={entry.file.name} className={styles.row} data-status={status}>
-                  <div className={styles.identity}>
-                    <span className={styles.accountName}>
-                      {displayCredentialLabel(entry.file.name, entry.file.note, showEmails)}
-                    </span>
-                    <span className={styles.accountKind}>
-                      {quota?.status === 'error'
-                        ? t('quota_forecast.quota_error')
-                        : entry.type === 'claude'
-                          ? t('quota_forecast.claude_weekly')
-                          : t('quota_forecast.codex_weekly')}
-                    </span>
-                    <span className={styles.statusPill} data-status={status}>
-                      {statusLabel(status)}
-                    </span>
-                  </div>
-
-                  <div className={styles.remaining}>
-                    <strong>{formatPercent(forecast.remainingPercent)}</strong>
-                    <span>{t('quota_forecast.left')}</span>
-                  </div>
-
-                  <div className={styles.forecastCell}>
-                    <p className={styles.headline}>{headlineText(forecast)}</p>
-                    <div
-                      className={styles.tracks}
-                      role="img"
-                      aria-label={t('quota_forecast.bar_aria', {
-                        used: formatPercent(usedPercent),
-                        elapsed: formatPercent(elapsedPercent),
-                      })}
-                    >
-                      <span className={styles.trackLabel}>{t('quota_forecast.bar_used')}</span>
-                      <span className={styles.track}>
-                        {usedPercent !== null && (
-                          <span
-                            className={styles.usedFill}
-                            data-tone={quotaRemainingTone(forecast.remainingPercent)}
-                            style={{ width: `${usedPercent}%` }}
-                          />
-                        )}
-                      </span>
-                      <span className={styles.trackValue}>{formatPercent(usedPercent)}</span>
-
-                      <span className={styles.trackLabel}>{t('quota_forecast.bar_elapsed')}</span>
-                      <span className={styles.track}>
-                        {elapsedPercent !== null && (
-                          <span
-                            className={styles.elapsedFill}
-                            style={{ width: `${elapsedPercent}%` }}
-                          />
-                        )}
-                        {cycleStartMs !== null &&
-                          forecast.outcome === 'before-reset' &&
-                          forecast.rangeStartMs !== null &&
-                          forecast.rangeEndMs !== null && (
-                            <span
-                              className={styles.rangeBand}
-                              style={{
-                                left: `${cyclePercent(forecast.rangeStartMs, cycleStartMs)}%`,
-                                width: `${
-                                  cyclePercent(forecast.rangeEndMs, cycleStartMs) -
-                                  cyclePercent(forecast.rangeStartMs, cycleStartMs)
-                                }%`,
-                              }}
-                            />
-                          )}
-                        {dryFromPercent !== null && (
-                          <span
-                            className={styles.dryZone}
-                            style={{ left: `${dryFromPercent}%`, right: 0 }}
-                          />
-                        )}
-                        {elapsedPercent !== null && (
-                          <span className={styles.nowMark} style={{ left: `${elapsedPercent}%` }} />
-                        )}
-                      </span>
-                      <span className={styles.trackValue}>{formatPercent(elapsedPercent)}</span>
-                    </div>
-                  </div>
-
-                  <div className={styles.reset}>
-                    <span>{t('quota_forecast.resets')}</span>
-                    <strong>
-                      {forecast.resetAtMs === null
-                        ? '--'
-                        : formatRelativeInstant(forecast.resetAtMs, nowMs, locale)}
-                    </strong>
-                    <small>{formatInstant(forecast.resetAtMs)}</small>
-                  </div>
-
-                  <dl className={styles.details}>
-                    <div>
-                      <dt>{t('quota_forecast.this_week')}</dt>
-                      <dd>
-                        {usage?.currentWeekTokens == null
-                          ? '--'
-                          : t('quota_forecast.value_tokens', {
-                              value: formatUsageCount(usage.currentWeekTokens),
-                            })}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('quota_forecast.daily_pace')}</dt>
-                      <dd>
-                        {usage?.dailyTokens == null
-                          ? '--'
-                          : t('quota_forecast.value_token_pace', {
-                              value: formatUsageCount(usage.dailyTokens),
-                              days: formatNumber((usage.observedRecentMs ?? 0) / DAY_MS),
-                            })}
-                      </dd>
-                    </div>
-                    {usage?.recentRequests != null && (
-                      <div>
-                        <dt>{t('quota_forecast.detail_requests')}</dt>
-                        <dd>
-                          {t('quota_forecast.value_requests', {
-                            requests: formatUsageCount(usage.recentRequests),
-                            failed: formatUsageCount(usage.recentFailed ?? 0),
-                          })}
-                        </dd>
-                      </div>
-                    )}
-                    {forecast.ratePercentPerDay !== null && (
-                      <div>
-                        <dt>{t('quota_forecast.detail_quota_pace')}</dt>
-                        <dd>
-                          {t('quota_forecast.value_quota_pace', {
-                            percent: formatNumber(forecast.ratePercentPerDay),
-                          })}
-                        </dd>
-                      </div>
-                    )}
-                    {forecast.observedAtMs !== null && (
-                      <div>
-                        <dt>{t('quota_forecast.detail_readings')}</dt>
-                        <dd>
-                          {t('quota_forecast.value_readings', {
-                            count: forecast.sampleCount,
-                            hours: formatNumber(forecast.sampleSpanMs / 3_600_000),
-                            minutes: Math.floor((forecast.ageMs ?? 0) / 60_000),
-                          })}
-                        </dd>
-                      </div>
-                    )}
-                    <div>
-                      <dt>{t('quota_forecast.detail_confidence')}</dt>
-                      <dd data-confidence={forecast.quality ?? forecast.confidence}>
-                        {confidenceText(forecast)}
-                      </dd>
-                    </div>
-                    {forecast.runoutChance !== null && (
-                      <div>
-                        <dt>{t('quota_forecast.detail_chance')}</dt>
-                        <dd>
-                          {t('quota_forecast.value_chance', {
-                            percent: formatPercentChance(forecast.runoutChance),
-                          })}
-                        </dd>
-                      </div>
-                    )}
-                    {forecast.outcome === 'before-reset' &&
-                      forecast.rangeStartMs !== null &&
-                      forecast.rangeEndMs !== null && (
-                        <div>
-                          <dt>{t('quota_forecast.detail_window')}</dt>
-                          <dd>
-                            {t('quota_forecast.value_window', {
-                              start: formatInstant(forecast.rangeStartMs),
-                              end:
-                                forecast.rangeEndMs >= (forecast.resetAtMs ?? Infinity)
-                                  ? t('quota_forecast.window_reset')
-                                  : formatInstant(forecast.rangeEndMs),
-                            })}
-                          </dd>
-                        </div>
+          <div className={styles.groups}>
+            {groups.map((group) => (
+              <section key={group.key} className={styles.group}>
+                {groupBy !== 'none' && (
+                  <div className={styles.groupHead}>
+                    <div className={styles.groupTitle}>
+                      {group.provider && providerChip(group.provider)}
+                      {group.plan ? (
+                        <span className={planBadgeClass(group.plan.tier)}>{group.plan.text}</span>
+                      ) : (
+                        group.label && <h3>{group.label}</h3>
                       )}
-                    {forecast.resetDetected && (
-                      <div className={styles.detailNote}>
-                        <dd>{t('quota_forecast.reset_excluded')}</dd>
+                      <span className={styles.groupCount}>
+                        {t('quota_forecast.accounts_count', { count: group.rows.length })}
+                      </span>
+                    </div>
+                    <div className={styles.groupStatus}>
+                      <div className={styles.miniBar} aria-hidden="true">
+                        {STATUS_KEYS.map((status) => {
+                          const count = group.rows.filter(
+                            (row) => displayStatus(row.forecast) === status
+                          ).length;
+                          return count > 0 ? (
+                            <span
+                              key={status}
+                              className={styles.statusSegment}
+                              data-status={status}
+                              style={{ flexGrow: count }}
+                            />
+                          ) : null;
+                        })}
                       </div>
-                    )}
-                    {forecast.includesImportedReadings && (
-                      <div className={styles.detailNote}>
-                        <dd>{t('quota_forecast.imported_readings')}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </li>
-              );
-            })}
-          </ul>
+                      {group.note && <span className={styles.groupNote}>{group.note}</span>}
+                    </div>
+                  </div>
+                )}
+                <ul className={styles.list}>{group.rows.map(renderRow)}</ul>
+              </section>
+            ))}
+          </div>
 
           {totals.unknown > 0 && (
             <p className={styles.unknownNote}>
