@@ -1,6 +1,5 @@
 /**
- * Codex 额度渲染体：套餐 chip 行（elite=Pro 20x 液态铂金 / premium=金卡）、
- * 重置积分明细、用量窗口水位条。
+ * Codex 额度渲染体：套餐 chip 行（档位见 cardTier.ts）、重置积分明细、用量窗口水位条。
  */
 
 import { useMemo } from 'react';
@@ -20,15 +19,7 @@ import { useNow } from '@/hooks/useNow';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
 import { collectQuotaRowInstants, pickUrgentRowId, resetCreditRowId } from '../../resetSchedule';
-import type { QuotaBodyProps, QuotaClassMap } from '../../types';
-
-const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): string => {
-  // elite/premium 顺序契约由 resolvePlanTier 承载（tests/quotaPlanTier.test.ts 守护）。
-  const tier = resolvePlanTier(planType);
-  if (tier === 'elite') return classes.elitePlanValue;
-  if (tier === 'premium') return classes.premiumPlanValue;
-  return classes.codexPlanValue;
-};
+import type { QuotaBodyProps } from '../../types';
 
 export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaState>) {
   const { t, i18n } = useTranslation();
@@ -49,15 +40,20 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
   const rateLimitResetCredits = quota.rateLimitResetCredits ?? [];
   const rateLimitResetCreditsError = quota.rateLimitResetCreditsError ?? '';
 
-  // One source of truth for the plan mapping: the compact quota list reads the
-  // same badge through `codexPlanBadge`.
+  // Use the same label and finish as the compact quota row.
   const planBadge = codexPlanBadge(planType);
   const planLabel = planBadge
     ? planBadge.labelKey
       ? t(planBadge.labelKey)
       : (planBadge.text ?? null)
     : null;
-  const planValueClass = getPlanValueClass(planType, classes);
+  const planTier = resolvePlanTier(planType);
+  const planValueClass =
+    planTier === 'elite'
+      ? classes.elitePlanValue
+      : planTier === 'premium'
+        ? classes.premiumPlanValue
+        : classes.codexPlanValue;
 
   // Renewal was the one date on this card in a different shape (a full
   // toLocaleString). Reformatted from the instant so it reads like the rest,

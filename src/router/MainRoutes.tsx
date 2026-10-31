@@ -9,6 +9,7 @@ import { QuotaPage } from '@/features/quota/QuotaPage';
 import { QuotaForecastPage } from '@/features/quotaForecast/QuotaForecastPage';
 import { PoolsPage } from '@/features/pools/PoolsPage';
 import { UsagePage } from '@/features/usage/UsagePage';
+import { RoutingPage } from '@/features/routing/RoutingPage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
@@ -30,6 +31,7 @@ const createMainRoutes = (supportsPlugin: boolean) => [
   { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
   { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
   { path: '/oauth', element: <OAuthPage /> },
+  { path: '/routing', element: <RoutingPage /> },
   { path: '/quota', element: <QuotaPage /> },
   { path: '/quota-forecast', element: <QuotaForecastPage /> },
   { path: '/pools', element: <PoolsPage /> },

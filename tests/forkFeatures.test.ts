@@ -187,7 +187,7 @@ describe('2026-10-05 dashboard pass contract', () => {
     expect(rowModel).toContain("'codex_quota.plan_promax'");
     expect(rowModel).toContain("'codex_quota.no_five_hour_limit'");
     expect(rowModel).toContain('rateLimitResetCreditsApplicableAvailableCount');
-    expect(read('src/utils/quota/planTier.ts')).toContain("ELITE_CODEX_PLAN_TYPE, 'promax'");
+    expect(read('src/utils/quota/planTier.ts')).toMatch(/ELITE_CODEX_PLAN_TYPE,\s*'promax'/);
     expect(read('src/features/quota/providers/claude/data.ts')).toContain("return 'plan_max20'");
     expect(read('src/utils/quota/familySummary.ts')).toContain('CONTESTED_WEEKLY');
     const row = read('src/features/quota/components/QuotaCredentialRow.tsx');

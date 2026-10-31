@@ -1,0 +1,494 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * 额度卡片 — 继承凭证卡 statTile 配方（14px 圆角 / 1px 边框 / 82% 透感纸面）。
+ * 提供商身份只由图标承载；套餐档位由卡面承载（见文件中段「档位」）。
+ * 遥测内容一律 mono + tabular-nums。
+ * ============================================================ */
+
+.card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 15px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  transition:
+    transform var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    box-shadow var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-hover);
+    box-shadow: 0 12px 26px -14px rgb(0 0 0 / 0.16);
+  }
+}
+
+/* ---------- 档位：标准间 → 行政间 → 套房 ----------
+ * 档差只来自「材质 + 光 + 高度」，每升一档三者各进一步，且始终跟随主题：
+ *              日间材质           夜间材质        灯光               高度
+ *   standard   纸面               纸面            不点灯             贴地
+ *   premium    暖白亚麻           胡桃木          灯带 + 漫射暖光     浅环境阴影
+ *   flagship   香槟色石灰华       深色石材        更亮的灯带与漫射    大而柔的环境阴影
+ * 套房另有一道内嵌的黄铜细线框（outline 内缩），像墙板的线脚。
+ * 日间的材质按「暖度」递进：纸面 → 暖白亚麻 → 香槟色石灰华，越高档底色越浓；
+ * 正文区域一律是干净的哑光面，不加纹理。
+ * 灯带是卡片上沿一道两端隐去的 1px 暖光，下方是它洒下的漫射光。
+ * 不用高光反射、金属渐变、外发光或循环动画。
+ * 动效只有两处：档位确定时灯光淡入一次（进门开灯）；悬停时调亮一点（调光旋钮）。
+ * 二者都只动 opacity，减动效下保留。 */
+
+/* 漫射光 */
+.card::before,
+/* 灯带 */
+.card::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 600ms ease;
+  pointer-events: none;
+}
+
+.card::before {
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    120% 72% at 50% 0%,
+    var(--card-lamp, transparent) 0%,
+    transparent 72%
+  );
+}
+
+.card::after {
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--card-strip, transparent) 30%,
+    var(--card-strip, transparent) 70%,
+    transparent
+  );
+}
+
+.premium::before,
+.flagship::before {
+  opacity: 0.75;
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.premium::after,
+.flagship::after {
+  opacity: 1;
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+/* 行政间：暖白亚麻（日间）/ 胡桃木（夜间） */
+.premium {
+  --card-lamp: rgb(214 158 104 / 0.3);
+  --card-strip: rgb(214 158 104 / 0.75);
+  --quota-plan-accent: var(--plan-accent-text);
+
+  background: color-mix(in srgb, var(--suite-champagne) 7%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--suite-amber) 34%, var(--border-color));
+  box-shadow: 0 6px 16px -10px rgb(120 80 40 / 0.28);
+}
+
+:global([data-theme='dark']) .premium {
+  --card-lamp: rgb(229 196 159 / 0.12);
+  --card-strip: rgb(229 196 159 / 0.5);
+
+  background: color-mix(in srgb, var(--suite-amber) 9%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--suite-amber) 22%, var(--border-color));
+  box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.5);
+}
+
+/* 套房 · 日间：香槟色石灰华 + 黄铜线框 */
+.flagship {
+  --card-lamp: rgb(214 158 104 / 0.26);
+  --card-strip: rgb(196 140 84 / 0.95);
+  --quota-plan-accent: var(--plan-accent-text);
+  /* 香槟底上默认分隔线/按钮描边会消失，换成同色系的青铜细线 */
+  --border-color: color-mix(in srgb, var(--plan-accent-text) 24%, transparent);
+  --border-hover: color-mix(in srgb, var(--plan-accent-text) 42%, transparent);
+
+  background: linear-gradient(
+    180deg,
+    var(--suite-travertine) 0%,
+    var(--suite-travertine-deep) 100%
+  );
+  border-color: color-mix(in srgb, var(--plan-accent-text) 48%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--plan-accent-text) 22%, transparent);
+  outline-offset: -5px;
+  box-shadow:
+    0 2px 6px -2px rgb(120 80 40 / 0.12),
+    0 18px 36px -18px rgb(120 80 40 / 0.42);
+}
+
+/* 套房 · 夜间：深色冷调石材 */
+:global([data-theme='dark']) .flagship {
+  --text-primary: var(--suite-ink);
+  --text-secondary: #b7bac1;
+  --text-tertiary: var(--suite-ink-muted);
+  --text-quaternary: #646871;
+  --border-color: rgb(255 255 255 / 0.08);
+  --border-hover: rgb(255 255 255 / 0.16);
+  --bg-primary: var(--suite-stone);
+  --bg-tertiary: rgb(255 255 255 / 0.06);
+  --primary-color: var(--suite-champagne);
+  --card-lamp: rgb(229 196 159 / 0.22);
+  --card-strip: rgb(229 196 159 / 0.7);
+  --quota-plan-accent: var(--suite-champagne);
+
+  color: var(--text-primary);
+  border-color: rgb(255 255 255 / 0.07);
+  outline-color: rgb(229 196 159 / 0.12);
+  background: linear-gradient(180deg, var(--suite-stone) 0%, var(--suite-stone-deep) 100%);
+  box-shadow: 0 16px 32px -8px rgb(0 0 0 / 0.45);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover::before {
+    opacity: 1;
+    transition-duration: 250ms;
+  }
+
+  .premium:hover {
+    border-color: color-mix(in srgb, var(--suite-amber) 50%, var(--border-color));
+    box-shadow: 0 12px 24px -12px rgb(120 80 40 / 0.32);
+  }
+
+  :global([data-theme='dark']) .premium:hover {
+    border-color: color-mix(in srgb, var(--suite-amber) 32%, var(--border-color));
+    box-shadow: 0 12px 26px -12px rgb(0 0 0 / 0.55);
+  }
+
+  .flagship:hover {
+    border-color: color-mix(in srgb, var(--plan-accent-text) 64%, transparent);
+    box-shadow:
+      0 2px 6px -2px rgb(120 80 40 / 0.14),
+      0 24px 42px -18px rgb(120 80 40 / 0.5);
+  }
+
+  :global([data-theme='dark']) .flagship:hover {
+    border-color: rgb(255 255 255 / 0.1);
+    box-shadow: 0 20px 36px -8px rgb(0 0 0 / 0.5);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .card::before,
+  .card::after {
+    content: none;
+  }
+
+  .premium {
+    border-color: var(--plan-accent-text);
+  }
+
+  .flagship {
+    border-color: var(--plan-accent-text);
+    outline: none;
+    background: var(--suite-travertine);
+  }
+
+  :global([data-theme='dark']) .flagship {
+    border-color: rgb(255 255 255 / 0.4);
+    background: var(--suite-stone-deep);
+  }
+}
+
+/* 首次数据到达时的一次性级联入场；切 tab / 翻页 / 刷新不重播 */
+.cardEnter {
+  animation: quota-card-in 0.45s var(--ease-out-strong, ease-out) both;
+  animation-delay: var(--card-delay, 0s);
+}
+
+@keyframes quota-card-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+}
+
+/* ---------- 头部：品牌图标 + 文件名 ---------- */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.iconWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+
+.iconFallback {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.fileName {
+  min-width: 0;
+  font-family: $font-mono;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  @include text-ellipsis;
+}
+
+/* ---------- body 容器 ---------- */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+/* ---------- idle：整块 body 即点击加载的落点 ---------- */
+
+.idleBody {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 76px;
+  padding: 12px 10px;
+  cursor: pointer;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: none;
+  color: var(--text-tertiary);
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .idleBody:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--primary-color) 35%, var(--border-color));
+    border-style: solid;
+    color: var(--text-secondary);
+  }
+}
+
+.idleGlyph {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.idleHint {
+  font-family: $font-mono;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ---------- loading：双幽灵行骨架 ---------- */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 4px 0 2px;
+}
+
+.skeletonRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 骨架：底色 + 一道 1.2s 匀速扫光（linear —— 环境性匀速运动的唯一例外） */
+.skeletonLabel,
+.skeletonTrack {
+  display: block;
+  border-radius: $radius-full;
+  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 20%,
+    color-mix(in srgb, var(--text-primary) 6%, transparent) 50%,
+    transparent 80%
+  );
+  background-repeat: no-repeat;
+  background-size: 220% 100%;
+  animation: quota-skeleton-sweep 1.2s linear infinite;
+}
+
+@keyframes quota-skeleton-sweep {
+  from {
+    background-position: -110% 0;
+  }
+  to {
+    background-position: 210% 0;
+  }
+}
+
+.skeletonLabel {
+  width: 40%;
+  height: 10px;
+}
+
+.skeletonTrack {
+  width: 100%;
+  height: 6px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- error ---------- */
+
+.errorStrip {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--viz-failure);
+  background: color-mix(in srgb, var(--viz-failure) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--viz-failure) 32%, transparent);
+  border-radius: 9px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- footer 动作 ---------- */
+
+.actionRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 安静描边药丸（与凭证卡图标动作同族：hover 才显色块） */
+.actionPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  background: none;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .actionPill:hover:not(:disabled) {
+    border-color: var(--border-hover);
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+    color: var(--text-primary);
+  }
+}
+
+.spinning {
+  animation: quota-card-spin 0.8s linear infinite;
+}
+
+@keyframes quota-card-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .idleBody,
+  .actionPill {
+    transition: none;
+  }
+
+  .idleBody:active:not(:disabled),
+  .actionPill:active:not(:disabled) {
+    transform: none;
+  }
+
+  .cardEnter,
+  .skeletonLabel,
+  .skeletonTrack,
+  .spinning {
+    animation: none;
+  }
+}

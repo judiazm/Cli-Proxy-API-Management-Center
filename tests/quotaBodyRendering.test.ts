@@ -61,7 +61,7 @@ describe('CodexQuotaBody', () => {
   };
 
   test.each(['en', 'zh-CN', 'zh-TW', 'ru'])(
-    'renders Business Premium with its premium badge in %s',
+    'retains the fork Business Premium badge in %s',
     async (language) => {
       await i18n.changeLanguage(language);
       try {
@@ -79,6 +79,7 @@ describe('CodexQuotaBody', () => {
   );
 
   test.each([
+    ['promax', 'Pro 500', 'elitePlanValue'],
     ['pro', 'Pro 200', 'elitePlanValue'],
     ['prolite', 'Pro 100', 'premiumPlanValue'],
     ['team', 'Team', 'codexPlanValue'],

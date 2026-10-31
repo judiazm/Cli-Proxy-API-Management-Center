@@ -9,6 +9,7 @@ import {
   type AnthropicResetGrantStatus,
   type AnthropicResetSettledCode,
 } from '@/services/api/claudeResetGrants';
+import { generateResetGrantRequestId } from './resetGrantRequestId';
 
 export type ResetGrantFailureStage =
   'organization' | 'status' | 'eligibility' | 'request_id' | 'operation';
@@ -45,8 +46,7 @@ export const RETRY_WINDOW_MS = 10 * 60 * 1000;
 export const STATUS_FRESH_MS = 2 * 60 * 1000;
 const ORGANIZATION_CACHE_MS = 10 * 60 * 1000;
 export type ResetClaimAnswer =
-  | AnthropicResetSettledCode
-  | { code: AnthropicResetSettledCode; reason: string | null };
+  AnthropicResetSettledCode | { code: AnthropicResetSettledCode; reason: string | null };
 type Operation = {
   grantId: string;
   organization: string;
@@ -71,7 +71,7 @@ const defaultDependencies = {
     return result.status === 'ok' && result.auth_index === authIndex;
   },
   now: () => Date.now(),
-  requestId: () => createResetRequestId(),
+  requestId: generateResetGrantRequestId,
 };
 
 /**
@@ -198,7 +198,9 @@ export function createResetGrantOperations(deps = defaultDependencies) {
             // Never clear a replacement connection's cooldown after awaiting the claim.
             assertSession();
             cooldownCleared = await deps.clearCooldown(authIndex, session);
+            assertSession();
           } catch {
+            assertSession();
             cooldownCleared = false;
           }
         }
