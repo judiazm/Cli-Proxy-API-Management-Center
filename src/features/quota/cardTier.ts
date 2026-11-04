@@ -1,14 +1,14 @@
 /**
- * 额度卡片档位：跨 provider 的统一阶梯。卡面（QuotaCard）与套餐文字
- * 档位。紧凑配额行继续使用 fork 自身的徽章映射。
+ * 套餐档位：跨 provider 的统一阶梯，决定套餐文字的样式。
+ * 紧凑配额行继续使用 fork 自身的徽章映射。
  *
- * 规则：各家最高个人档 = 套房；其下的付费个人档 = 行政间；入门付费档、
- * 团队/商业套餐与免费档 = 标准间。
+ * 规则：各家最高个人档 = flagship；其下的付费个人档 = premium；入门付费档、
+ * 团队/商业套餐与免费档 = standard。
  *
- * - flagship 套房：Codex Pro 500、Kimi Allegro、Claude Max 20x、Antigravity Ultra、SuperGrok Heavy
- * - premium  行政间：Codex Pro 200 / Pro 100、Claude Max 5x / Max（未区分）、
+ * - flagship：Codex Pro 500、Kimi Allegro、Claude Max 20x、Antigravity Ultra、SuperGrok Heavy
+ * - premium： Codex Pro 200 / Pro 100、Claude Max 5x / Max（未区分）、
  *            Kimi Allegretto、Antigravity Ultra Lite、SuperGrok、xAI 付费 API
- * - standard 标准间：Plus、Team、Business（含 Business Premium）、Pro（Claude /
+ * - standard：Plus、Team、Business（含 Business Premium）、Pro（Claude /
  *            Antigravity）、Kimi Moderato / Andante、Free，以及档位未知
  *
  * React-free，便于单测。
@@ -116,7 +116,7 @@ export function resolveInitialQuotaCardTier(
   return type === 'codex' ? resolveCodexCardTier(resolveCodexPlanType(file)) : 'standard';
 }
 
-/** 套餐文字的样式：与卡面同档。 */
+/** 档位对应的套餐文字样式。 */
 export function planValueClassForTier(tier: QuotaCardTier, classes: QuotaClassMap): string {
   if (tier === 'flagship') return classes.elitePlanValue;
   if (tier === 'premium') return classes.premiumPlanValue;
