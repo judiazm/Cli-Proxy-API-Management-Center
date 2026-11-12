@@ -62,6 +62,10 @@ import {
 } from './logic';
 import { nextRecoveryMs } from './resetSchedule';
 import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
+import {
+  codexCreditOverageKey,
+  countCodexCreditOverageKeys,
+} from './providers/codex/creditOverage';
 import type { QuotaProviderType } from './providers/types';
 import { useDevinQuotaAutoLoad } from './providers/devin/useDevinQuotaAutoLoad';
 import { useQuotaActions } from './hooks/useQuotaActions';
@@ -77,8 +81,7 @@ import styles from './QuotaPage.module.scss';
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
 const SKELETON_ROW_COUNT = 5;
 
-const entryKey = (entry: QuotaFileEntry) =>
-  `${entry.type}:${getQuotaCacheKey(entry.file)}`;
+const entryKey = (entry: QuotaFileEntry) => `${entry.type}:${getQuotaCacheKey(entry.file)}`;
 
 /**
  * Grid template for one family's rows: identity, one track per window, actions.
@@ -216,6 +219,14 @@ export function QuotaPage() {
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
+  // Account-level settings span every page and tab, so count over all entries.
+  const codexCreditOverageCounts = useMemo(
+    () =>
+      countCodexCreditOverageKeys(
+        entries.filter((entry) => entry.type === 'codex').map((entry) => entry.file)
+      ),
+    [entries]
+  );
   const filteredEntries = useMemo(
     () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
     [entries, tab, search]
@@ -553,6 +564,11 @@ export function QuotaPage() {
                       showEmails={showEmails}
                       canRefresh={canUseActions && !entry.file.disabled}
                       resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+                      creditOverageSharedCount={
+                        entry.type === 'codex'
+                          ? codexCreditOverageCounts.get(codexCreditOverageKey(entry.file) ?? '')
+                          : undefined
+                      }
                       nowMs={now}
                       onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
                       onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}

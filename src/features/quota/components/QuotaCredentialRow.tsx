@@ -17,7 +17,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { IconRefreshCw } from '@/components/ui/icons';
-import type { ClaudeQuotaState, ResolvedTheme } from '@/types';
+import type { ClaudeQuotaState, CodexQuotaState, ResolvedTheme } from '@/types';
 import {
   MANUAL_RESETS_COLUMN_ID,
   displayCredentialLabel,
@@ -38,7 +38,11 @@ import {
 } from '@/features/authFiles/constants';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '../providers';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
+import { ClaudeResetGrantDialog } from '../providers/claude/ClaudeResetGrantDialog';
 import { ClaudeResetGrantDetails } from '../providers/claude/ClaudeResetGrantDetails';
+import { CodexCreditOverageDialog } from '../providers/codex/CodexCreditOverageDialog';
+import { CodexCreditOverageRow } from '../providers/codex/CodexCreditOverageRow';
+import { useCodexCreditOverage } from '../providers/codex/useCodexCreditOverage';
 import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { bindClassMap, bindQuotaClasses } from '../types';
 import { QUOTA_BAR_CLASS_KEYS, QuotaBar } from './QuotaBar';
@@ -62,6 +66,7 @@ export interface QuotaCredentialRowProps {
   showEmails: boolean;
   canRefresh: boolean;
   resetting: boolean;
+  creditOverageSharedCount?: number;
   nowMs: number;
   onRefresh: () => void;
   onReset: () => void;
@@ -106,6 +111,7 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
     showEmails,
     canRefresh,
     resetting,
+    creditOverageSharedCount = 1,
     nowMs,
     onRefresh,
     onReset,
@@ -135,8 +141,12 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
     entry.type === 'claude' && status !== 'idle',
     !canRefresh || loading || resetting,
     quota,
-    onRefresh,
-    displayName
+    onRefresh
+  );
+  const creditOverage = useCodexCreditOverage(
+    file,
+    entry.type === 'codex' ? (quota as CodexQuotaState | undefined) : undefined,
+    !canRefresh || loading || resetting
   );
   const errorMessage = resolveQuotaErrorMessage(
     t,
@@ -435,7 +445,8 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
             type="button"
             className={styles.actionPill}
             disabled={claudeReset.blocked}
-            onClick={claudeReset.confirm}
+            onClick={claudeReset.openDialog}
+            aria-haspopup="dialog"
             title={t(`claude_reset.${claudeReset.buttonLabel}`)}
           >
             <IconRefreshCw size={12} className={claudeReset.busy ? styles.spinning : undefined} />
@@ -478,6 +489,50 @@ export function QuotaCredentialRow(props: QuotaCredentialRowProps) {
             showTitle={false}
           />
         </details>
+      )}
+      {creditOverage.visible && (
+        <div className={styles.creditOverage}>
+          <CodexCreditOverageRow
+            entry={creditOverage.entry}
+            classes={quotaClasses}
+            disabled={creditOverage.blocked}
+            name={displayName}
+            onManage={creditOverage.openDialog}
+          />
+        </div>
+      )}
+      {entry.type === 'claude' && (
+        <ClaudeResetGrantDialog
+          open={claudeReset.open}
+          grants={claudeReset.grants}
+          selected={claudeReset.selected}
+          canRedeemGrant={claudeReset.canRedeemGrant}
+          onSelect={claudeReset.selectGrant}
+          busy={claudeReset.busy}
+          loading={claudeReset.loading}
+          pendingGrantId={claudeReset.pendingGrantId}
+          message={claudeReset.message}
+          name={displayName}
+          onConfirm={() => void claudeReset.confirm()}
+          onClose={claudeReset.closeDialog}
+        />
+      )}
+      {creditOverage.context && (
+        <CodexCreditOverageDialog
+          open={creditOverage.open}
+          context={creditOverage.context}
+          entry={creditOverage.entry}
+          operation={creditOverage.operation}
+          writeDisabled={creditOverage.writeDisabled}
+          contextCurrent={creditOverage.contextCurrent}
+          sharedCredentialCount={creditOverageSharedCount}
+          selection={creditOverage.selection}
+          pendingTarget={creditOverage.pendingTarget}
+          feedback={creditOverage.feedback}
+          onSelect={creditOverage.selectValue}
+          onSave={() => void creditOverage.save()}
+          onClose={creditOverage.closeDialog}
+        />
       )}
     </li>
   );

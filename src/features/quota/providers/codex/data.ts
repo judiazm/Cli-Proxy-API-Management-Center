@@ -303,7 +303,7 @@ export const normalizeCodexAccountCredits = (
   };
 };
 
-const buildCodexRequestHeader = (file: AuthFileItem): Record<string, string> => {
+export const buildCodexRequestHeader = (file: AuthFileItem): Record<string, string> => {
   const accountId = resolveCodexChatgptAccountId(file);
   const requestHeader: Record<string, string> = {
     ...CODEX_REQUEST_HEADERS,
