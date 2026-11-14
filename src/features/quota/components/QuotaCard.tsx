@@ -8,7 +8,7 @@
 
 import { useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconRefreshCw } from '@/components/ui/icons';
+import { IconChevronDown, IconRefreshCw } from '@/components/ui/icons';
 import type { ClaudeQuotaState, CodexQuotaState, ResolvedTheme } from '@/types';
 import { resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
@@ -49,6 +49,12 @@ export type QuotaCardProps = {
   resetting: boolean;
   /** Initial cascade delay; null disables entrance motion for later mounts. */
   entranceDelayMs?: number | null;
+  /**
+   * Compact layout only: true shows the glance card (name, plan, one line per limit),
+   * false the full card. Undefined (other layouts) shows the full card with no toggle.
+   */
+  glance?: boolean;
+  onToggleGlance?: () => void;
   /** Codex only: credentials in the panel sharing this account user's credit setting. */
   creditOverageSharedCount?: number;
   onRefresh: () => void;
@@ -63,6 +69,8 @@ export function QuotaCard(props: QuotaCardProps) {
     canRefresh,
     resetting,
     entranceDelayMs,
+    glance,
+    onToggleGlance,
     creditOverageSharedCount = 1,
     onRefresh,
     onReset,
@@ -157,11 +165,13 @@ export function QuotaCard(props: QuotaCardProps) {
         styles.card,
         TIER_CLASS[tier],
         mountEntranceDelayMs === null ? undefined : styles.cardEnter,
+        glance ? styles.cardGlance : undefined,
       ]
         .filter(Boolean)
         .join(' ')}
       style={entranceStyle}
       data-tier={tier}
+      data-quota-glance={glance ? '' : undefined}
     >
       <header className={styles.head}>
         <span
@@ -182,6 +192,18 @@ export function QuotaCard(props: QuotaCardProps) {
         <span className={styles.fileName} title={displayName}>
           {displayName}
         </span>
+        {glance !== undefined && (
+          <button
+            type="button"
+            className={styles.glanceToggle}
+            onClick={onToggleGlance}
+            aria-expanded={!glance}
+            aria-label={`${t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}: ${displayName}`}
+            title={t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}
+          >
+            <IconChevronDown size={14} />
+          </button>
+        )}
       </header>
 
       <div className={styles.body}>
@@ -234,7 +256,7 @@ export function QuotaCard(props: QuotaCardProps) {
         )}
       </div>
 
-      {status !== 'idle' && (
+      {status !== 'idle' && !glance && (
         <footer className={styles.actionRow}>
           {entry.type === 'claude' && (
             <button

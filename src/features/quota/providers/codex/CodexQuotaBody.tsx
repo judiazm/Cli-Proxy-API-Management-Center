@@ -83,7 +83,7 @@ export function CodexQuotaBody({
         planItems) && (
         <div className={classes.codexPlan}>
           {planLabel && (
-            <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanItem} data-quota-plan="">
               <span className={classes.codexPlanLabel}>{t('codex_quota.plan_label')}</span>
               <span className={planValueClass}>{planLabel}</span>
             </span>

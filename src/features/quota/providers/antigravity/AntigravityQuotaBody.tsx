@@ -131,7 +131,7 @@ export function AntigravityQuotaBody({ quota, classes }: QuotaBodyProps<Antigrav
     <>
       {planLabel && (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanItem}>
+          <span className={classes.codexPlanItem} data-quota-plan="">
             <span className={classes.codexPlanLabel}>{t('antigravity_quota.plan_label')}</span>
             <span className={isPremiumPlan ? classes.premiumPlanValue : classes.codexPlanValue}>
               {planLabel}
