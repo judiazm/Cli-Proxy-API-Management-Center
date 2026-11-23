@@ -76,6 +76,7 @@ const BINDING_PREFERENCE: Record<QuotaProviderFamily, readonly string[]> = {
     'codex_quota.team_secondary_window',
     'codex_quota.primary_window',
   ],
+  copilot: ['copilot_quota.premium'],
   devin: ['devin_quota.weekly', 'devin_quota.daily'],
   xai: ['xai_quota.weekly_limit', 'xai_quota.monthly_credits'],
   meta: ['meta_quota.weekly', 'meta_quota.window'],

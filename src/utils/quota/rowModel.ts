@@ -18,6 +18,7 @@ import type {
   AntigravityQuotaSubscription,
   ClaudeQuotaState,
   CodexQuotaState,
+  CopilotQuotaState,
   DevinQuotaState,
   KimiQuotaState,
   MetaQuotaState,
@@ -41,7 +42,7 @@ import { clampPercent, remainingFromUsed } from './tone';
  * `QuotaProviderType` is an alias of it.
  */
 export type QuotaProviderFamily =
-  'antigravity' | 'claude' | 'codex' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
+  'antigravity' | 'claude' | 'codex' | 'copilot' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
 
 /** Column key for the manual-reset ledger, which is not a usage window. */
 export const MANUAL_RESETS_COLUMN_ID = '__manual_resets__';
@@ -624,6 +625,26 @@ const buildPluginModel = (quota: PluginQuotaState): QuotaCredentialRowModel => {
   };
 };
 
+const buildCopilotModel = (quota: CopilotQuotaState): QuotaCredentialRowModel => {
+  const data = quota.data;
+  return {
+    ...EMPTY_MODEL,
+    windows: data
+      ? [
+          {
+            columnId: 'copilot_quota.premium',
+            labelKey: 'copilot_quota.premium',
+            remainingPercent: clampPercent(data.percentRemaining),
+            resetLabel: null,
+            resetAtMs: null,
+            amountLabel: `${data.remaining} / ${data.entitlement}`,
+          },
+        ]
+      : [],
+    messageKey: data ? null : 'copilot_quota.unavailable',
+  };
+};
+
 /**
  * Flatten one credential's loaded quota. Claude keeps observed data visible
  * during a refresh or failed read, flagged stale so summaries can exclude it.
@@ -653,6 +674,8 @@ export function buildQuotaRowModel(
       return buildClaudeModel(quota as ClaudeQuotaState);
     case 'codex':
       return buildCodexModel(quota as CodexQuotaState);
+    case 'copilot':
+      return buildCopilotModel(quota as CopilotQuotaState);
     case 'devin':
       return buildDevinModel(quota as DevinQuotaState);
     case 'kimi':

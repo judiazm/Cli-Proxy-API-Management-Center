@@ -14,6 +14,7 @@ import type {
   CodexQuotaState,
   DevinQuotaState,
   KimiQuotaState,
+  CopilotQuotaState,
   MetaQuotaState,
   PluginQuotaState,
   XaiQuotaState,
@@ -35,6 +36,7 @@ export interface QuotaStore {
   codexQuota: Record<string, CodexQuotaState>;
   devinQuota: Record<string, DevinQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
+  copilotQuota: Record<string, CopilotQuotaState>;
   metaQuota: Record<string, MetaQuotaState>;
   pluginQuota: Record<string, PluginQuotaState>;
   xaiQuota: Record<string, XaiQuotaState>;
@@ -43,6 +45,7 @@ export interface QuotaStore {
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
   setDevinQuota: (updater: QuotaUpdater<Record<string, DevinQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
+  setCopilotQuota: (updater: QuotaUpdater<Record<string, CopilotQuotaState>>) => void;
   setMetaQuota: (updater: QuotaUpdater<Record<string, MetaQuotaState>>) => void;
   setPluginQuota: (updater: QuotaUpdater<Record<string, PluginQuotaState>>) => void;
   setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;

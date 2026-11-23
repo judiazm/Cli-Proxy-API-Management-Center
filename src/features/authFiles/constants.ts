@@ -4,6 +4,7 @@ import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconMeta from '@/assets/icons/meta.svg';
+import iconCopilot from '@/assets/icons/copilot.svg';
 import iconDevin from '@/assets/icons/devin.svg';
 import iconDevinDark from '@/assets/icons/devin-dark.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
@@ -29,11 +30,12 @@ export type AuthFileModelItem = {
 export type AuthFileIconAsset = string | { light: string; dark: string };
 
 export type QuotaProviderType =
-  'antigravity' | 'claude' | 'codex' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
+  'antigravity' | 'claude' | 'copilot' | 'codex' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
 export type AuthFileQuotaFilter = string | null;
 export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
 
 export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
+  'copilot',
   'meta',
   'antigravity',
   'claude',
@@ -46,6 +48,7 @@ export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
 
 export const OAUTH_PROVIDER_PRESETS = [
   'meta',
+  'copilot',
   'vertex',
   'aistudio',
   'antigravity',
@@ -67,6 +70,7 @@ export const FALSY_TEXT_VALUES = new Set(['false', '0', 'no', 'n', 'off']);
 export const AUTH_FILE_WEBSOCKET_PROVIDERS = new Set(['codex', 'xai']);
 export const AUTH_FILE_USING_API_PROVIDERS = new Set(['xai']);
 export const AUTH_FILE_MANUAL_REFRESH_PROVIDERS = new Set([
+  'copilot',
   'meta',
   'antigravity',
   'claude',
@@ -84,6 +88,7 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   claude: iconClaude,
   codex: iconCodex,
   meta: iconMeta,
+  copilot: iconCopilot,
   devin: { light: iconDevin, dark: iconDevinDark },
   gemini: iconGemini,
   xai: { light: iconGrok, dark: iconGrokDark },

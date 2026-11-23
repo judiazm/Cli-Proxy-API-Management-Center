@@ -1,3 +1,4 @@
+import { ProviderArtwork } from '@/components/common/ProviderArtwork';
 /**
  * Provider quota card: identity, loading/error state, quota body, and actions.
  * Claude observations remain visible while refreshing or after a failed read.
@@ -183,11 +184,9 @@ export function QuotaCard(props: QuotaCardProps) {
               : undefined
           }
         >
-          {iconSrc ? (
-            <img src={iconSrc} alt="" className={styles.icon} />
-          ) : (
+          <ProviderArtwork provider={providerType} src={iconSrc} className={styles.icon}>
             <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
-          )}
+          </ProviderArtwork>
         </span>
         <span className={styles.fileName} title={displayName}>
           {displayName}
