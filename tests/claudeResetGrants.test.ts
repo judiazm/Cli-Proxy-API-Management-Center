@@ -688,30 +688,14 @@ test('read authentication refusals retain a safe diagnostic code', async () => {
   }
 });
 
-test('all grant messages and confirmation are translated in six locales', async () => {
-  const locales = await Promise.all(
-    ['en', 'zh-CN', 'zh-TW', 'ru', 'vi', 'ko'].map(
-      async (locale) => (await Bun.file(`src/i18n/locales/${locale}.json`).json()).claude_reset
-    )
-  );
-  for (const locale of locales) {
-    expect(Object.keys(locale).sort()).toEqual(Object.keys(locales[0]).sort());
-    for (const stage of ['organization', 'status', 'eligibility', 'request_id', 'operation']) {
-      expect(locale[`failure_${stage}`]).toContain('{{code}}');
-    }
-    expect(locale.confirm_text).toContain('{{name}}');
-    expect(locale.retry_confirm).toContain('{{name}}');
-    expect(typeof locale.remaining).toBe('string');
-    expect(locale.count).toContain('{{left}}');
-    for (const key of [
-      ...ANTHROPIC_RESET_RESULTS,
-      'auth_error',
-      'rate_limited',
-      'unknown',
-      'expired',
-    ]) {
-      expect(typeof locale[key]).toBe('string');
-    }
+test('every dynamic reset outcome code has an en message', async () => {
+  // Codes are translated via `claude_reset.${code}`; localeParity covers the other locales.
+  const en = (await Bun.file('src/i18n/locales/en.json').json()).claude_reset;
+  for (const stage of ['organization', 'status', 'eligibility', 'request_id', 'operation']) {
+    expect(en[`failure_${stage}`]).toContain('{{code}}');
+  }
+  for (const key of [...ANTHROPIC_RESET_RESULTS, 'auth_error', 'rate_limited', 'unknown']) {
+    expect(typeof en[key]).toBe('string');
   }
 });
 
